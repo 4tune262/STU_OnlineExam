@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>Compiler Test</title>
+
+</head>
+
+<body>
+
+<h2>C++ Compiler</h2>
+
+<textarea id="code" rows="20" cols="90">
+#include<iostream>
+using namespace std;
+
+int main(){
+
+int a;
+
+cin>>a;
+
+cout<<a*2;
+
+}
+</textarea>
+
+<br><br>
+
+Input
+
+<br>
+
+<textarea id="input" rows="4" cols="90">5</textarea>
+
+<br><br>
+
+<button onclick="runCode()">
+
+Run
+
+</button>
+
+<pre id="result"></pre>
+
+<script>
+
+async function runCode(){
+
+const response=await fetch("/api/run/",{
+
+method:"POST",
+
+headers:{
+
+"Content-Type":"application/json"
+
+},
+
+body:JSON.stringify({
+
+code:document.getElementById("code").value,
+
+input:document.getElementById("input").value
+
+})
+
+});
+
+const data=await response.json();
+
+document.getElementById("result").textContent=
+
+JSON.stringify(data,null,4);
+
+}
+
+</script>
+
+</body>
+
+</html>

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block body_block %}
+<div class="container mt-5 mb-5">
+    <div class="card shadow border-0 p-4">
+        <h2 class="mb-4 text-primary"><i class="bi bi-people-fill"></i> Quản lý kết quả bài thi: {{ exam.title }}</h2>
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>STT</th>
+                        <th>Mã SV / Username</th>
+                        <th>Họ và tên</th>
+                        <th>Thời gian nộp</th>
+                        <th>Điểm số</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for se in submissions %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ se.student.username }}</td>
+                        <td>{{ se.student.get_full_name|default:"Chưa cập nhật" }}</td>
+                        <td>{{ se.submitted_at|date:"d/m/Y H:i:s"|default:"Chưa nộp" }}</td>
+                        <td><span class="badge bg-success fs-6">{{ se.score|default:0 }}</span></td>
+                        <td>
+                            <a href="{% url 'teacher_view_student_detail' se.id %}" class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-eye"></i> Xem bài làm
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted">Chưa có sinh viên nào thực hiện bài thi này.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

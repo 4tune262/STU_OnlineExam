@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block body_block %}
+<div class="container mt-4 mb-5">
+    <h2 class="mb-4"><i class="bi bi-bar-chart-fill"></i> Lịch sử và Điểm thi của bạn</h2>
+    <table class="table table-hover shadow-sm bg-white rounded">
+        <thead class="table-dark">
+            <tr>
+                <th>STT</th>
+                <th>Tên bài thi</th>
+                <th>CODE</th>
+                <th>Điểm số</th>
+                <th>Thời gian nộp</th>
+                <th>Thao tác</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for res in results %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td class="fw-bold">{{ res.exam.title }}</td>
+                <td><span class="badge bg-secondary">{{ result.exam_code }}</span></td>
+                <td><span class="badge bg-success fs-6">{{ res.score }} điểm</span></td>
+                <td>{{ res.finished_at|date:"d/m/Y H:i:s" }}</td>
+                <td>
+                    <a href="{% url 'exam_result' res.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i> Xem chi tiết
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">Bạn chưa hoàn thành bài thi nào.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

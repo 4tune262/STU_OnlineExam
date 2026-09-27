@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block body_block %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <h2 class="mb-4">Đăng nhập hệ thống (Sinh viên)</h2>
+            <p class="text-muted">Đưa mã QR của bạn vào khung camera bên dưới để đăng nhập.</p>
+            
+            <!-- Khung chứa camera -->
+            <div id="reader" style="width: 100%; max-width: 500px; margin: 0 auto; border-radius: 10px; overflow: hidden;"></div>
+            
+            <div id="status-message" class="mt-3 fw-bold"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Thư viện quét QR -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<script>
+    // Hàm lấy CSRF Token để gửi kèm request POST của Django
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    // Hàm xử lý khi quét QR thành công
+    function onScanSuccess(decodedText, decodedResult) {
+        // Dừng máy quét sau khi quét thành công để tránh gửi request liên tục
+        html5QrcodeScanner.clear();
+        
+        const statusDiv = document.getElementById('status-message');
+        statusDiv.innerHTML = '<span class="text-primary">Đang xác thực mã QR...</span>';
+
+        // Gửi token quét được lên server
+        fetch('{% url "verify_qr_login" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({ qr_token: decodedText })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.status === 'success') {
+                statusDiv.innerHTML = `<span class="text-success">${data.message} Đang chuyển hướng...</span>`;
+                // Chuyển hướng người dùng qua trang bài thi / trang chủ
+                setTimeout(() => {
+                    window.location.href = data.redirect_url;
+                }, 1500);
+            } else {
+                statusDiv.innerHTML = `<span class="text-danger">Lỗi: ${data.message}</span>`;
+                // Khởi động lại máy quét nếu thất bại
+                setTimeout(() => { location.reload(); }, 3000);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            statusDiv.innerHTML = '<span class="text-danger">Lỗi kết nối tới máy chủ.</span>';
+        });
+    }
+
+    function onScanFailure(error) {
+        // Bỏ qua lỗi quét liên tục (do camera bắt khung hình liên tục)
+        // console.warn(`Code scan error = ${error}`);
+    }
+
+    // Khởi tạo html5QrcodeScanner
+    let html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: {width: 250, height: 250} },
+        /* verbose= */ false
+    );
+    
+    // Yêu cầu quyền camera và bắt đầu quét
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+</script>
+{% endblock %}

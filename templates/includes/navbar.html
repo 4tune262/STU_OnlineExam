@@ -1,0 +1,174 @@
+
+<!--{% load static %}-->
+
+<!--<nav class="navbar navbar-expand-lg navbar-dark stu-navbar">-->
+<!--    <div class="container-fluid">-->
+<!--        <button id="menu-btn" class="btn btn-link text-white">-->
+<!--            <i class="bi bi-list fs-3"></i>-->
+<!--        </button>-->
+
+<!--        <a class="navbar-brand ms-3" href="{% url 'home' %}">-->
+<!--            <img src="{% static 'images/logo.png' %}" width="45">-->
+<!--            <span class="fw-bold ms-2">STU Online Examination</span>-->
+<!--        </a>-->
+
+<!--        <div class="ms-auto d-flex align-items-center">-->
+<!--            <button id="darkModeBtn" class="btn btn-link text-white me-3">-->
+<!--                <i class="bi bi-moon-stars-fill"></i>-->
+<!--            </button>-->
+
+<!--            <div class="dropdown">-->
+<!--                <a class="text-white dropdown-toggle text-decoration-none d-flex align-items-center" href="#" data-bs-toggle="dropdown">-->
+<!--                    {% if request.user.is_authenticated %}-->
+<!--                        &lt;!&ndash; Nếu đã đăng nhập, hiển thị avatar từ UserProfile &ndash;&gt;-->
+<!--                        <img src="{{ request.user.userprofile.avatar.url }}" width="42" height="42" class="rounded-circle border border-light object-fit-cover">-->
+<!--                        <span class="ms-2 text-white d-none d-md-inline">{{ request.user.username }}</span>-->
+<!--                    {% else %}-->
+<!--                        &lt;!&ndash; Nếu chưa đăng nhập, hiển thị avatar mặc định &ndash;&gt;-->
+<!--                        <img src="{% static 'images/default-avatar.png' %}" width="42" height="42" class="rounded-circle border border-light">-->
+<!--                    {% endif %}-->
+<!--                </a>-->
+
+<!--                <ul class="dropdown-menu dropdown-menu-end shadow">-->
+<!--                    {% if not request.user.is_authenticated %}-->
+<!--                        &lt;!&ndash; Menu khi CHƯA đăng nhập &ndash;&gt;-->
+<!--                        <li>-->
+<!--                            <a class="dropdown-item fw-bold text-primary" href="{% url 'qr_login_page' %}">-->
+<!--                                <i class="bi bi-qr-code-scan"></i> Đăng nhập bằng QR-->
+<!--                            </a>-->
+<!--                        </li>-->
+<!--                    {% else %}-->
+<!--                        &lt;!&ndash; Menu khi ĐÃ đăng nhập &ndash;&gt;-->
+<!--                        <li>-->
+<!--                            <a class="dropdown-item" href="{% url 'profile' %}">-->
+<!--                                <i class="bi bi-person"></i> Hồ sơ-->
+<!--                            </a>-->
+<!--                        </li>-->
+<!--                        <li>-->
+<!--                            <a class="dropdown-item" href="{% url 'course_list' %}">-->
+<!--                                <i class="bi bi-journal-bookmark"></i> Khóa học-->
+<!--                            </a>-->
+<!--                        </li>-->
+<!--                        <li>-->
+<!--                            <a class="dropdown-item" href="#">-->
+<!--                                <i class="bi bi-bar-chart"></i> Điểm thi-->
+<!--                            </a>-->
+<!--                        </li>-->
+<!--                        <hr class="dropdown-divider">-->
+<!--                        <li>-->
+<!--                            <form action="{% url 'logout' %}" method="post" class="d-inline">-->
+<!--                                {% csrf_token %}-->
+<!--                                <button type="submit" class="dropdown-item text-danger">-->
+<!--                                    <i class="bi bi-box-arrow-right"></i> Đăng xuất-->
+<!--                                </button>-->
+<!--                            </form>-->
+<!--                        </li>-->
+<!--                    &lt;!&ndash; Thêm mục này dành riêng cho Admin &ndash;&gt;-->
+<!--                        {% if request.user.is_staff %}-->
+<!--                        <li>-->
+<!--                            <a class="dropdown-item fw-bold text-warning" href="{% url 'admin:index' %}">-->
+<!--                                <i class="bi bi-shield-lock-fill"></i> Quản trị hệ thống-->
+<!--                            </a>-->
+<!--                        </li>-->
+<!--                        <li><hr class="dropdown-divider"></li>-->
+<!--                        {% endif %}-->
+
+
+<!--                    {% endif %}-->
+
+<!--                </ul>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+<!--</nav>-->
+
+{% load static %}
+
+<nav class="navbar navbar-expand-lg navbar-dark stu-navbar">
+    <div class="container-fluid">
+        <button id="menu-btn" class="btn btn-link text-white">
+            <i class="bi bi-list fs-3"></i>
+        </button>
+
+        <a class="navbar-brand ms-3" href="{% url 'home' %}">
+            <img src="{% static 'images/logo.png' %}" width="45">
+            <span class="fw-bold ms-2">STU Online Examination</span>
+        </a>
+
+        <div class="ms-auto d-flex align-items-center">
+            <button id="darkModeBtn" class="btn btn-link text-white me-3">
+                <i class="bi bi-moon-stars-fill"></i>
+            </button>
+
+            <div class="dropdown">
+                <a class="text-white dropdown-toggle text-decoration-none d-flex align-items-center" href="#" data-bs-toggle="dropdown">
+                    {% if request.user.is_authenticated %}
+                        <!-- Nếu đã đăng nhập, hiển thị avatar từ UserProfile hoặc mặc định -->
+                        {% if request.user.userprofile and request.user.userprofile.avatar %}
+                            <img src="{{ request.user.userprofile.avatar.url }}" width="42" height="42" class="rounded-circle border border-light object-fit-cover">
+                        {% else %}
+                            <img src="{% static 'images/default-avatar.png' %}" width="42" height="42" class="rounded-circle border border-light">
+                        {% endif %}
+                        <span class="ms-2 text-white d-none d-md-inline">{{ request.user.username }}</span>
+                    {% else %}
+                        <!-- Nếu chưa đăng nhập, hiển thị avatar mặc định -->
+                        <img src="{% static 'images/default-avatar.png' %}" width="42" height="42" class="rounded-circle border border-light">
+                    {% endif %}
+                </a>
+
+                <ul class="dropdown-menu dropdown-menu-end shadow">
+                    {% if not request.user.is_authenticated %}
+                        <!-- Menu khi CHƯA đăng nhập -->
+                        <li>
+                            <a class="dropdown-item fw-bold text-primary" href="{% url 'qr_login_page' %}">
+                                <i class="bi bi-qr-code-scan"></i> Đăng nhập bằng QR
+                            </a>
+                        </li>
+                    {% else %}
+                        <!-- Menu khi ĐÃ đăng nhập -->
+                        <li>
+                            <a class="dropdown-item" href="{% url 'profile' %}">
+                                <i class="bi bi-person"></i> Hồ sơ
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'course_list' %}">
+                                <i class="bi bi-journal-bookmark"></i> Khóa học
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'exam_list' %}">
+                                <i class="bi bi-pencil-square"></i> Bài thi
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'exam_result_list' %}">
+                                <i class="bi bi-bar-chart"></i> Điểm thi
+                            </a>
+                        </li>
+
+                        <!-- Thêm mục dành riêng cho Giảng viên / Quản trị viên -->
+                        {% if request.user.is_staff or request.user.is_superuser %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item fw-bold text-warning" href="{% url 'admin:index' %}">
+                                <i class="bi bi-shield-lock-fill"></i> Quản trị hệ thống
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        <hr class="dropdown-divider">
+                        <li>
+                            <form action="{% url 'logout' %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                                </button>
+                            </form>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>

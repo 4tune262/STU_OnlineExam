@@ -1,0 +1,77 @@
+/* Giao diện chuẩn Visual Studio Dark Theme chỉ áp dụng riêng cho các khung code */
+.vscode-code-box {
+    background-color: #1e1e1e !important;
+    color: #d4d4d4 !important;
+    font-family: 'Courier New', Courier, monospace;
+    border-radius: 6px;
+    padding: 15px;
+    border: 1px solid #3c3c3c;
+}
+
+.vscode-textarea {
+    background-color: #1e1e1e !important;
+    color: #9cdcfe !important;
+    border: 1px solid #3c3c3c !important;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* Ô trống điền khuyết (Drag) */
+.blank-slot {
+    display: inline-block;
+    min-width: 100px;
+    height: 26px;
+    background-color: #2d2d2d;
+    border: 1px dashed #007acc;
+    border-radius: 4px;
+    vertical-align: middle;
+    text-align: center;
+    color: #4ec9b0;
+    margin: 0 4px;
+    padding: 0 6px;
+}
+.blank-slot.drag-over {
+    background-color: #094771;
+    border-color: #9cdcfe;
+}
+
+.draggable-badge {
+    background-color: #007acc;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: grab;
+    display: inline-block;
+    margin: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+}
+.draggable-badge:active {
+    cursor: grabbing;
+}
+
+/* Khung 2 cột cho câu hỏi Sắp xếp (Sort) */
+.sort-container-left, .sort-container-right {
+    min-height: 200px;
+    background: #f8f9fa;
+    border: 2px dashed #ced4da;
+    border-radius: 6px;
+    padding: 10px;
+}
+.sort-container-right {
+    background: #e9ecef;
+    border: 2px solid #0d6efd;
+}
+.sort-item {
+    background: white;
+    border: 1px solid #ced4da;
+    border-left: 4px solid #0d6efd;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    cursor: grab;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+}
+.sort-item:active {
+    cursor: grabbing;
+}
