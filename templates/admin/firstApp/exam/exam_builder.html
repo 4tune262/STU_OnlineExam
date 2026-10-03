@@ -1,0 +1,2359 @@
+{% extends "admin/base_site.html" %} {% block title %} {{ title }} | Django
+Admin {% endblock %} {% block extrastyle %} {{ block.super }}
+
+<style>
+  /* =========================================================
+       EXAM BUILDER
+       ========================================================= */
+
+  .exam-builder {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .exam-builder * {
+    box-sizing: border-box;
+  }
+
+  .exam-builder select,
+  .exam-builder input,
+  .exam-builder textarea {
+    font-family: inherit;
+  }
+
+  /* ---------- SELECT FIX ---------- */
+
+  .exam-builder select {
+    color: #333 !important;
+    background-color: #fff !important;
+    border: 1px solid #aaa !important;
+    border-radius: 4px;
+    min-height: 42px;
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+    padding: 9px 12px !important;
+    opacity: 1 !important;
+  }
+
+  .exam-builder select option {
+    color: #333 !important;
+    background-color: #fff !important;
+    font-size: 14px !important;
+  }
+
+  .exam-builder select:focus {
+    border-color: #417690 !important;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.15);
+  }
+
+  /* ---------- INPUT ---------- */
+
+  .exam-builder input[type="text"],
+  .exam-builder input[type="number"],
+  .exam-builder input[type="datetime-local"],
+  .exam-builder textarea {
+    color: #333 !important;
+    background-color: #fff !important;
+    border: 1px solid #aaa !important;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .exam-builder input[type="text"],
+  .exam-builder input[type="number"],
+  .exam-builder input[type="datetime-local"] {
+    min-height: 42px;
+    padding: 9px 12px;
+  }
+
+  .exam-builder textarea {
+    padding: 10px 12px;
+    resize: vertical;
+  }
+
+  .exam-builder input:focus,
+  .exam-builder textarea:focus {
+    border-color: #417690 !important;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.15);
+  }
+
+  /* ---------- LABEL ---------- */
+
+  .exam-builder label {
+    display: block;
+    color: #333;
+    font-size: 14px;
+  }
+
+  /* ---------- HEADER ---------- */
+
+  .exam-builder-header {
+    margin-bottom: 24px;
+  }
+
+  .exam-builder-header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    font-weight: 500;
+  }
+
+  .exam-builder-header p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+
+  /* ---------- CARD ---------- */
+
+  .builder-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .builder-card-title {
+    margin: 0 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 20px;
+    color: #333;
+  }
+
+  /* ---------- GRID ---------- */
+
+  .exam-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .form-group {
+    min-width: 0;
+  }
+
+  .form-help {
+    margin: 6px 0 0;
+    color: #777;
+    font-size: 13px;
+  }
+
+  /* ---------- QUESTIONS HEADER ---------- */
+
+  .questions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .questions-header h2 {
+    margin: 0 0 5px;
+    font-size: 20px;
+    color: #333;
+  }
+
+  .questions-header p {
+    margin: 0;
+    color: #777;
+    font-size: 14px;
+  }
+
+  /* ---------- BUTTON ---------- */
+
+  .builder-btn {
+    border: 0;
+    border-radius: 5px;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .builder-btn-primary {
+    background: #417690;
+    color: #fff;
+  }
+
+  .builder-btn-primary:hover {
+    background: #315b70;
+  }
+
+  .builder-btn-danger {
+    background: #ba2121;
+    color: #fff;
+  }
+
+  .builder-btn-danger:hover {
+    background: #991b1b;
+  }
+
+  .builder-btn-secondary {
+    background: #777;
+    color: #fff;
+  }
+
+  .builder-btn-secondary:hover {
+    background: #5f5f5f;
+  }
+
+  .builder-btn-small {
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  /* ---------- QUESTION CARD ---------- */
+
+  .question-card {
+    background: #fafafa;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 18px;
+  }
+
+  .question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 18px;
+  }
+
+  .question-title {
+    margin: 0;
+    font-size: 17px;
+    color: #333;
+  }
+
+  .question-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .question-type {
+    min-width: 150px;
+  }
+
+  .question-content {
+    width: 100%;
+    min-height: 100px;
+  }
+
+  .question-specific {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid #ddd;
+  }
+
+  /* ---------- MCQ ---------- */
+
+  .answer-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .answer-label {
+    width: 25px;
+    font-weight: bold;
+  }
+
+  .answer-input {
+    flex: 1;
+  }
+
+  .correct-answer-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+  }
+
+  .correct-answer {
+    width: 100px;
+  }
+
+  /* ---------- DYNAMIC ITEM ---------- */
+
+  .items-container {
+    margin-top: 10px;
+  }
+
+  .dynamic-item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .dynamic-item-number {
+    width: 30px;
+    font-weight: bold;
+  }
+
+  .dynamic-item-input {
+    flex: 1;
+  }
+
+  /* ---------- CODE ---------- */
+
+  .code-field {
+    margin-top: 15px;
+  }
+
+  .code-field label {
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .starter-code {
+    width: 100%;
+    min-height: 180px;
+    font-family: Consolas, Monaco, monospace !important;
+  }
+
+  .testcases-container {
+    margin-top: 15px;
+  }
+
+  .testcase-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 12px;
+  }
+
+  .testcase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .testcase-title {
+    font-weight: bold;
+    color: #333;
+  }
+
+  .testcase-field {
+    margin-bottom: 12px;
+  }
+
+  .testcase-field:last-child {
+    margin-bottom: 0;
+  }
+
+  .testcase-field label {
+    margin-bottom: 5px;
+    font-weight: 600;
+  }
+
+  /* ---------- EMPTY ---------- */
+
+  .empty-questions {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #777;
+    margin-top: 20px;
+  }
+
+  /* ---------- ACTIONS ---------- */
+
+  .builder-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    margin-bottom: 30px;
+  }
+
+  .builder-link {
+    display: inline-block;
+    background: #777;
+    color: #fff !important;
+    padding: 10px 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .builder-link:hover {
+    background: #5f5f5f;
+  }
+
+  /* ---------- RESPONSIVE ---------- */
+
+  @media (max-width: 800px) {
+    .exam-info-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .questions-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .question-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .question-header-right {
+      justify-content: space-between;
+    }
+
+    .question-type {
+      width: 100%;
+    }
+
+    .dynamic-item-row {
+      flex-wrap: wrap;
+    }
+
+    .dynamic-item-input {
+      min-width: 200px;
+    }
+
+    .builder-actions {
+      flex-direction: column;
+    }
+
+    .builder-actions > * {
+      width: 100%;
+      text-align: center;
+    }
+  }
+</style>
+
+{% endblock %} {% block content %}
+
+<div class="exam-builder">
+  <!-- =====================================================
+         HEADER
+         ===================================================== -->
+
+  <div class="exam-builder-header">
+    <h1>{% if exam %} Chỉnh sửa bài thi {% else %} Tạo bài thi {% endif %}</h1>
+
+    <p>
+      Nhập toàn bộ thông tin và câu hỏi của bài thi tại một giao diện duy nhất.
+    </p>
+  </div>
+
+  <!-- =====================================================
+         THÔNG TIN BÀI THI
+         ===================================================== -->
+
+  <div class="builder-card">
+    <h2 class="builder-card-title">1. Thông tin bài thi</h2>
+
+    <div class="exam-info-grid">
+      <!-- TÊN BÀI THI -->
+
+      <div class="form-group">
+        <label for="exam-title">
+          <strong>Tên bài thi</strong>
+        </label>
+
+        <input
+          id="exam-title"
+          type="text"
+          name="title"
+          value="{% if exam %}{{ exam.title }}{% endif %}"
+          placeholder="Ví dụ: Kiểm tra giữa kỳ Kỹ thuật lập trình"
+          style="width: 100%; margin-top: 6px"
+        />
+      </div>
+
+      <!-- MÔN HỌC -->
+
+      <div class="form-group">
+        <label for="exam-course">
+          <strong>Môn học</strong>
+        </label>
+
+        <select
+          id="exam-course"
+          name="course"
+          style="width: 100%; margin-top: 6px"
+        >
+          <option value="">-- Chọn môn học --</option>
+
+          {% for course in courses %}
+
+          <option
+            value="{{ course.id }}"
+            {%
+            if
+            exam
+            and
+            exam.course_id=""
+            ="course.id"
+            %}
+            selected
+            {%
+            endif
+            %}
+          >
+            {{ course.code }} - {{ course.name }}
+          </option>
+
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- LỚP HỌC PHẦN -->
+
+      <div class="form-group">
+        <label for="exam-offering">
+          <strong>Khóa / Lớp học phần</strong>
+        </label>
+
+        <select
+          id="exam-offering"
+          name="offering"
+          style="width: 100%; margin-top: 6px"
+        >
+          <option value="">-- Chọn lớp học phần --</option>
+
+          {% for offering in offerings %}
+
+          <option
+    value="{{ offering.id }}"
+    data-course="{{ offering.course_id }}"
+    {% if exam and exam.offering_id == offering.id %}selected{% endif %}
+>
+    {{ offering.course.code }} - {{ offering.group_code }} - Buổi {{ offering.session_number }}
+</option>
+
+          {% endfor %}
+        </select>
+
+        <p class="form-help">Chỉ chọn lớp học phần thuộc môn học đã chọn.</p>
+      </div>
+
+      <!-- THỜI GIAN -->
+
+      <div class="form-group">
+        <label for="exam-duration">
+          <strong>Thời gian làm bài</strong>
+        </label>
+
+        <div
+          style="display: flex; align-items: center; gap: 10px; margin-top: 6px"
+        >
+          <input
+            id="exam-duration"
+            type="number"
+            name="duration_minutes"
+            value="{% if exam %}{{ exam.duration_minutes }}{% else %}60{% endif %}"
+            min="1"
+            style="width: 150px"
+          />
+
+          <span>phút</span>
+        </div>
+      </div>
+
+      <!-- BẮT ĐẦU -->
+
+      <div class="form-group">
+        <label for="exam-start">
+          <strong>Ngày / giờ bắt đầu</strong>
+        </label>
+
+        <input
+          id="exam-start"
+          type="datetime-local"
+          name="start_time"
+          style="width: 100%; margin-top: 6px"
+        />
+      </div>
+
+      <!-- KẾT THÚC -->
+
+      <div class="form-group">
+        <label for="exam-end">
+          <strong>Ngày / giờ kết thúc</strong>
+        </label>
+
+        <input
+          id="exam-end"
+          type="datetime-local"
+          name="end_time"
+          style="width: 100%; margin-top: 6px"
+        />
+      </div>
+
+      <!-- SỐ MÃ ĐỀ -->
+
+      <div class="form-group">
+        <label for="exam-papers">
+          <strong>Số mã đề</strong>
+        </label>
+
+        <input
+          id="exam-papers"
+          type="number"
+          name="number_of_papers"
+          value="{% if exam %}{{ exam.number_of_papers }}{% else %}1{% endif %}"
+          min="1"
+          style="width: 150px; margin-top: 6px"
+        />
+
+        <p class="form-help">Ví dụ nhập 5 → hệ thống tạo 5 mã đề.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================
+         CÂU HỎI
+         ===================================================== -->
+
+  <div class="builder-card">
+    <div class="questions-header">
+      <div>
+        <h2>2. Câu hỏi</h2>
+
+        <p>
+          MCQ có 4 đáp án. DRAG và SORT có thể thêm bao nhiêu item tùy ý. CODE
+          có thể thêm nhiều test case.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        id="add-question"
+        class="builder-btn builder-btn-primary"
+      >
+        + Thêm câu hỏi
+      </button>
+    </div>
+
+    <div id="questions-container">
+      <div id="empty-questions" class="empty-questions">
+        Chưa có câu hỏi.
+        <br />
+        Nhấn
+        <strong>+ Thêm câu hỏi</strong>
+        để bắt đầu.
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================
+         BUTTON
+         ===================================================== -->
+
+  <div class="builder-actions">
+    <a href="/admin/firstApp/exam/" class="builder-link"> Hủy </a>
+
+    <button
+      type="button"
+      id="save-exam"
+      class="builder-btn builder-btn-primary"
+    >
+      Lưu bài thi
+    </button>
+  </div>
+
+  <form id="exam-save-form" method="post" style="display: none">
+    {% csrf_token %}
+
+    <input type="hidden" name="title" id="save-title" />
+
+    <input type="hidden" name="course" id="save-course" />
+
+    <input type="hidden" name="offering" id="save-offering" />
+
+    <input type="hidden" name="duration_minutes" id="save-duration" />
+
+    <input type="hidden" name="start_time" id="save-start" />
+
+    <input type="hidden" name="end_time" id="save-end" />
+
+    <input type="hidden" name="number_of_papers" id="save-papers" />
+
+    <input type="hidden" name="question_data" id="save-question-data" />
+  </form>
+</div>
+
+<script>
+
+  /* =========================================================
+     DATA TỪ DJANGO
+     ========================================================= */
+
+  const examData = {
+      courseId: "{% if exam %}{{ exam.course_id }}{% endif %}",
+      offeringId: "{% if exam %}{{ exam.offering_id }}{% endif %}",
+      questionData: {{ exam.question_data|default:"[]"|safe }}
+  };
+
+
+  /* =========================================================
+     COURSE → OFFERING
+     ========================================================= */
+
+  const courseSelect =
+      document.getElementById("exam-course");
+
+  const offeringSelect =
+      document.getElementById("exam-offering");
+
+
+  function filterOfferings() {
+
+      const selectedCourse =
+          courseSelect.value;
+
+      const options =
+          offeringSelect.querySelectorAll(
+              "option[data-course]"
+          );
+
+      options.forEach(function(option) {
+
+          if (
+              !selectedCourse ||
+              option.dataset.course === selectedCourse
+          ) {
+
+              option.style.display = "";
+
+          } else {
+
+              option.style.display = "none";
+
+              if (
+                  option.selected
+              ) {
+                  option.selected = false;
+                  offeringSelect.value = "";
+              }
+
+          }
+
+      });
+
+  }
+
+
+  courseSelect.addEventListener(
+      "change",
+      filterOfferings
+  );
+
+  filterOfferings();
+
+
+  /* =========================================================
+     QUESTION COUNTER
+     ========================================================= */
+
+  let questionIndex = 0;
+
+
+  /* =========================================================
+     EMPTY STATE
+     ========================================================= */
+
+  function updateEmptyState() {
+
+      const container =
+          document.getElementById(
+              "questions-container"
+          );
+
+      const empty =
+          document.getElementById(
+              "empty-questions"
+          );
+
+      const questions =
+          container.querySelectorAll(
+              ".question-card"
+          );
+
+      if (questions.length === 0) {
+
+          empty.style.display = "block";
+
+      } else {
+
+          empty.style.display = "none";
+
+      }
+
+  }
+
+
+  /* =========================================================
+     ADD QUESTION
+     ========================================================= */
+
+  document
+      .getElementById("add-question")
+      .addEventListener(
+          "click",
+          function() {
+
+              questionIndex++;
+
+              createQuestion();
+
+          }
+      );
+
+
+  function createQuestion(
+      existingQuestion = null
+  ) {
+
+      const container =
+          document.getElementById(
+              "questions-container"
+          );
+
+
+      const question =
+          document.createElement("div");
+
+      question.className =
+          "question-card";
+
+
+      question.dataset.index =
+          questionIndex;
+
+
+      question.innerHTML = `
+
+          <div class="question-header">
+
+              <h3 class="question-title">
+                  Câu ${questionIndex}
+              </h3>
+
+              <div class="question-header-right">
+
+                  <select
+                      class="question-type"
+                  >
+
+                      <option value="MCQ">
+                          MCQ
+                      </option>
+
+                      <option value="DRAG">
+                          DRAG
+                      </option>
+
+                      <option value="SORT">
+                          SORT
+                      </option>
+
+                      <option value="CODE">
+                          CODE
+                      </option>
+
+                  </select>
+
+
+                  <button
+                      type="button"
+                      class="builder-btn
+                             builder-btn-danger
+                             builder-btn-small
+                             remove-question"
+                  >
+                      Xóa
+                  </button>
+
+              </div>
+
+          </div>
+
+
+          <div class="form-group">
+
+              <label>
+                  <strong>Nội dung câu hỏi</strong>
+              </label>
+
+              <textarea
+                  class="question-content"
+                  rows="4"
+                  placeholder="Nhập nội dung câu hỏi..."
+              ></textarea>
+
+          </div>
+
+
+          <div
+              class="question-specific"
+          ></div>
+
+      `;
+
+
+      container.appendChild(question);
+
+
+      const typeSelect =
+          question.querySelector(
+              ".question-type"
+          );
+
+
+      const contentInput =
+          question.querySelector(
+              ".question-content"
+          );
+
+
+      /* Nếu là câu hỏi cũ */
+
+      if (existingQuestion) {
+
+          typeSelect.value =
+              existingQuestion.type || "MCQ";
+
+          contentInput.value =
+              existingQuestion.content || "";
+
+      }
+
+
+      renderQuestionType(
+          question,
+          typeSelect.value,
+          existingQuestion
+      );
+
+
+      typeSelect.addEventListener(
+          "change",
+          function() {
+
+              renderQuestionType(
+                  question,
+                  this.value
+              );
+
+          }
+      );
+
+
+      question
+          .querySelector(
+              ".remove-question"
+          )
+          .addEventListener(
+              "click",
+              function() {
+
+                  question.remove();
+
+                  renumberQuestions();
+
+                  updateEmptyState();
+
+              }
+          );
+
+
+      updateEmptyState();
+
+  }
+
+
+  /* =========================================================
+     RENUMBER QUESTIONS
+     ========================================================= */
+
+  function renumberQuestions() {
+
+      const questions =
+          document.querySelectorAll(
+              ".question-card"
+          );
+
+
+      questions.forEach(
+          function(question, index) {
+
+              const number =
+                  index + 1;
+
+              question.dataset.index =
+                  number;
+
+              question
+                  .querySelector(
+                      ".question-title"
+                  )
+                  .textContent =
+                  "Câu " + number;
+
+          }
+      );
+
+
+      questionIndex =
+          questions.length;
+
+  }
+
+
+  /* =========================================================
+     RENDER QUESTION TYPE
+     ========================================================= */
+
+  function renderQuestionType(
+      question,
+      type,
+      existingQuestion = null
+  ) {
+
+      const area =
+          question.querySelector(
+              ".question-specific"
+          );
+
+
+      if (type === "MCQ") {
+
+          renderMCQ(
+              area,
+              existingQuestion
+          );
+
+      }
+
+
+      else if (type === "DRAG") {
+
+          renderDrag(
+              area,
+              existingQuestion
+          );
+
+      }
+
+
+      else if (type === "SORT") {
+
+          renderSort(
+              area,
+              existingQuestion
+          );
+
+      }
+
+
+      else if (type === "CODE") {
+
+          renderCode(
+              area,
+              existingQuestion
+          );
+
+      }
+
+  }
+
+
+  /* =========================================================
+     MCQ
+     ========================================================= */
+
+  function renderMCQ(
+      area,
+      existingQuestion = null
+  ) {
+
+      const choices =
+          existingQuestion &&
+          existingQuestion.choices
+              ? existingQuestion.choices
+              : [];
+
+
+      function getChoice(
+          label
+      ) {
+
+          const found =
+              choices.find(
+                  function(choice) {
+                      return choice.label === label;
+                  }
+              );
+
+          return found
+              ? found.text
+              : "";
+
+      }
+
+
+      const correct =
+          existingQuestion &&
+          existingQuestion.correct_answer
+              ? existingQuestion.correct_answer
+              : "A";
+
+
+      area.innerHTML = `
+
+          <div>
+
+              <strong>
+                  Đáp án MCQ
+              </strong>
+
+
+              <div style="margin-top: 15px;">
+
+                  ${createMCQAnswer(
+                      "A",
+                      getChoice("A")
+                  )}
+
+                  ${createMCQAnswer(
+                      "B",
+                      getChoice("B")
+                  )}
+
+                  ${createMCQAnswer(
+                      "C",
+                      getChoice("C")
+                  )}
+
+                  ${createMCQAnswer(
+                      "D",
+                      getChoice("D")
+                  )}
+
+              </div>
+
+
+              <div class="correct-answer-row">
+
+                  <label>
+                      <strong>
+                          Đáp án đúng
+                      </strong>
+                  </label>
+
+                  <select
+                      class="correct-answer"
+                  >
+
+                      <option
+                          value="A"
+                          ${correct === "A" ? "selected" : ""}
+                      >
+                          A
+                      </option>
+
+                      <option
+                          value="B"
+                          ${correct === "B" ? "selected" : ""}
+                      >
+                          B
+                      </option>
+
+                      <option
+                          value="C"
+                          ${correct === "C" ? "selected" : ""}
+                      >
+                          C
+                      </option>
+
+                      <option
+                          value="D"
+                          ${correct === "D" ? "selected" : ""}
+                      >
+                          D
+                      </option>
+
+                  </select>
+
+              </div>
+
+          </div>
+
+      `;
+
+  }
+
+
+  /* =========================================================
+     CREATE MCQ ANSWER
+     ========================================================= */
+
+  function createMCQAnswer(
+      label,
+      value = ""
+  ) {
+
+      return `
+
+          <div class="answer-row">
+
+              <div class="answer-label">
+                  ${label}.
+              </div>
+
+              <input
+                  type="text"
+                  class="answer-input choice-${label}"
+                  value="${escapeHtml(value)}"
+                  placeholder="Nhập đáp án ${label}"
+              >
+
+          </div>
+
+      `;
+
+  }
+
+
+  /* =========================================================
+     DRAG
+     ========================================================= */
+
+  function renderDrag(
+      area,
+      existingQuestion = null
+  ) {
+
+      area.innerHTML = `
+
+          <div>
+
+              <label class="form-label" style="margin-top: 12px;">
+                  Mẫu code (đặt [[1]], [[2]], ... tại vị trí cần điền)
+              </label>
+
+              <textarea
+                  class="question-content code-template-input"
+                  rows="4"
+                  placeholder="Ví dụ: int total = [[1]] + [[2]];"
+              ></textarea>
+
+              <strong>
+                  Các item kéo thả
+              </strong>
+
+              <div class="items-container"></div>
+
+              <button
+                  type="button"
+                  class="builder-btn
+                         builder-btn-primary
+                         builder-btn-small
+                         add-item"
+                  style="margin-top: 10px;"
+              >
+                  + Thêm item
+              </button>
+
+          </div>
+
+      `;
+
+      const templateInput = area.querySelector(".code-template-input");
+      templateInput.value = existingQuestion && existingQuestion.code_template
+          ? existingQuestion.code_template
+          : "";
+
+
+      const items =
+          existingQuestion &&
+          existingQuestion.items
+              ? existingQuestion.items
+              : [];
+
+
+      if (items.length > 0) {
+
+          items.forEach(
+              function(item) {
+
+                  addDynamicItem(
+                      area,
+                      item.text || ""
+                  );
+
+              }
+          );
+
+      } else {
+
+          addDynamicItem(area);
+
+      }
+
+  }
+
+
+  /* =========================================================
+     SORT
+     ========================================================= */
+
+  function renderSort(
+      area,
+      existingQuestion = null
+  ) {
+
+      area.innerHTML = `
+
+          <div>
+
+              <strong>
+                  Các item sắp xếp
+              </strong>
+
+              <p class="form-help">
+                  Nhập các item theo thứ tự đúng.
+                  Hệ thống sẽ lưu thứ tự hiện tại.
+              </p>
+
+              <div class="items-container"></div>
+
+              <button
+                  type="button"
+                  class="builder-btn
+                         builder-btn-primary
+                         builder-btn-small
+                         add-item"
+                  style="margin-top: 10px;"
+              >
+                  + Thêm item
+              </button>
+
+          </div>
+
+      `;
+
+
+      const items =
+          existingQuestion &&
+          existingQuestion.items
+              ? existingQuestion.items
+              : [];
+
+
+      if (items.length > 0) {
+
+          const sortedItems =
+              [...items].sort(
+                  function(a, b) {
+
+                      return (
+                          (a.correct_order || 0)
+                          -
+                          (b.correct_order || 0)
+                      );
+
+                  }
+              );
+
+
+          sortedItems.forEach(
+              function(item) {
+
+                  addDynamicItem(
+                      area,
+                      item.text || ""
+                  );
+
+              }
+          );
+
+      } else {
+
+          addDynamicItem(area);
+
+      }
+
+  }
+
+
+  /* =========================================================
+     DYNAMIC ITEM
+     ========================================================= */
+
+  function addDynamicItem(
+      area,
+      value = ""
+  ) {
+
+      const container =
+          area.querySelector(
+              ".items-container"
+          );
+
+
+      const item =
+          document.createElement("div");
+
+      item.className =
+          "dynamic-item-row";
+
+
+      const number =
+          container.children.length + 1;
+
+
+      item.innerHTML = `
+
+          <div class="dynamic-item-number">
+              ${number}.
+          </div>
+
+          <input
+              type="text"
+              class="dynamic-item-input"
+              value="${escapeHtml(value)}"
+              placeholder="Nhập item"
+          >
+
+          <button
+              type="button"
+              class="builder-btn
+                     builder-btn-danger
+                     builder-btn-small
+                     remove-item"
+          >
+              X
+          </button>
+
+      `;
+
+
+      container.appendChild(item);
+
+
+      item
+          .querySelector(
+              ".remove-item"
+          )
+          .addEventListener(
+              "click",
+              function() {
+
+                  item.remove();
+
+                  renumberItems(
+                      container
+                  );
+
+              }
+          );
+
+  }
+
+
+  /* =========================================================
+     RENUMBER ITEMS
+     ========================================================= */
+
+  function renumberItems(
+      container
+  ) {
+
+      const items =
+          container.querySelectorAll(
+              ".dynamic-item-row"
+          );
+
+
+      items.forEach(
+          function(item, index) {
+
+              item
+                  .querySelector(
+                      ".dynamic-item-number"
+                  )
+                  .textContent =
+                  (index + 1) + ".";
+
+          }
+      );
+
+  }
+
+
+  /* =========================================================
+     CODE
+     ========================================================= */
+
+  function renderCode(
+      area,
+      existingQuestion = null
+  ) {
+
+      const language =
+          existingQuestion &&
+          existingQuestion.language
+              ? existingQuestion.language
+              : "cpp";
+
+
+      const functionName =
+          existingQuestion &&
+          existingQuestion.function_name
+              ? existingQuestion.function_name
+              : "";
+
+
+      const starterCode =
+          existingQuestion &&
+          existingQuestion.starter_code
+              ? existingQuestion.starter_code
+              : "";
+
+
+      area.innerHTML = `
+
+          <div>
+
+              <strong>
+                  Câu hỏi lập trình
+              </strong>
+
+
+              <div class="code-field">
+
+                  <label>
+                      Ngôn ngữ
+                  </label>
+
+                  <select
+                      class="code-language"
+                      style="width: 200px;"
+                  >
+
+                      <option
+                          value="cpp"
+                          ${language === "cpp" ? "selected" : ""}
+                      >
+                          C++
+                      </option>
+
+                  </select>
+
+              </div>
+
+
+              <div class="code-field">
+
+                  <label>
+                      Tên hàm
+                  </label>
+
+                  <input
+                      type="text"
+                      class="function-name"
+                      value="${escapeHtml(functionName)}"
+                      placeholder="Ví dụ: sum"
+                      style="width: 100%;"
+                  >
+
+              </div>
+
+
+              <div class="code-field">
+
+                  <label>
+                      Starter Code
+                  </label>
+
+                  <textarea
+                      class="starter-code"
+                      rows="8"
+                      placeholder="Nhập code mẫu..."
+                  >${escapeHtml(starterCode)}</textarea>
+
+              </div>
+
+
+              <div
+                  class="testcases-container"
+              ></div>
+
+
+              <button
+                  type="button"
+                  class="builder-btn
+                         builder-btn-primary
+                         builder-btn-small
+                         add-testcase"
+                  style="margin-top: 10px;"
+              >
+                  + Thêm Test Case
+              </button>
+
+          </div>
+
+      `;
+
+
+      const testcases =
+          existingQuestion &&
+          existingQuestion.test_cases
+              ? existingQuestion.test_cases
+              : [];
+
+
+      if (testcases.length > 0) {
+
+          testcases.forEach(
+              function(testcase) {
+
+                  addTestCase(
+                      area,
+                      testcase
+                  );
+
+              }
+          );
+
+      } else {
+
+          addTestCase(area);
+
+      }
+
+  }
+
+
+  /* =========================================================
+     ADD TEST CASE
+     ========================================================= */
+
+  function addTestCase(
+      area,
+      data = null
+  ) {
+
+      const container =
+          area.querySelector(
+              ".testcases-container"
+          );
+
+
+      const testcase =
+          document.createElement("div");
+
+      testcase.className =
+          "testcase-card";
+
+
+      const number =
+          container.children.length + 1;
+
+
+      const input =
+          data && data.input
+              ? data.input
+              : "";
+
+
+      const output =
+          data && data.expected_output
+              ? data.expected_output
+              : "";
+
+
+      const score =
+          data && data.score !== undefined
+              ? data.score
+              : 1;
+
+
+      testcase.innerHTML = `
+
+          <div class="testcase-header">
+
+              <div class="testcase-title">
+                  Test Case ${number}
+              </div>
+
+              <button
+                  type="button"
+                  class="builder-btn
+                         builder-btn-danger
+                         builder-btn-small
+                         remove-testcase"
+              >
+                  Xóa
+              </button>
+
+          </div>
+
+
+          <div class="testcase-field">
+
+              <label>
+                  Input
+              </label>
+
+              <textarea
+                  class="test-input"
+                  rows="3"
+                  placeholder="Dữ liệu đầu vào..."
+              >${escapeHtml(input)}</textarea>
+
+          </div>
+
+
+          <div class="testcase-field">
+
+              <label>
+                  Expected Output
+              </label>
+
+              <textarea
+                  class="test-output"
+                  rows="3"
+                  placeholder="Kết quả mong đợi..."
+              >${escapeHtml(output)}</textarea>
+
+          </div>
+
+
+          <div class="testcase-field">
+
+              <label>
+                  Điểm
+              </label>
+
+              <input
+                  type="number"
+                  class="test-score"
+                  value="${score}"
+                  min="0"
+                  step="0.1"
+                  style="width: 120px;"
+              >
+
+          </div>
+
+      `;
+
+
+      container.appendChild(
+          testcase
+      );
+
+
+      testcase
+          .querySelector(
+              ".remove-testcase"
+          )
+          .addEventListener(
+              "click",
+              function() {
+
+                  testcase.remove();
+
+                  renumberTestCases(
+                      container
+                  );
+
+              }
+          );
+
+  }
+
+
+  /* =========================================================
+     RENUMBER TEST CASE
+     ========================================================= */
+
+  function renumberTestCases(
+      container
+  ) {
+
+      const testcases =
+          container.querySelectorAll(
+              ".testcase-card"
+          );
+
+
+      testcases.forEach(
+          function(testcase, index) {
+
+              testcase
+                  .querySelector(
+                      ".testcase-title"
+                  )
+                  .textContent =
+                  "Test Case " +
+                  (index + 1);
+
+          }
+      );
+
+  }
+
+
+  /* =========================================================
+     GLOBAL CLICK
+     ========================================================= */
+
+  document.addEventListener(
+      "click",
+      function(event) {
+
+          /* + ITEM */
+
+          if (
+              event.target.classList.contains(
+                  "add-item"
+              )
+          ) {
+
+              const area =
+                  event.target.closest(
+                      ".question-specific"
+                  );
+
+              addDynamicItem(
+                  area
+              );
+
+          }
+
+
+          /* + TEST CASE */
+
+          if (
+              event.target.classList.contains(
+                  "add-testcase"
+              )
+          ) {
+
+              const area =
+                  event.target.closest(
+                      ".question-specific"
+                  );
+
+              addTestCase(
+                  area
+              );
+
+          }
+
+      }
+  );
+
+
+  /* =========================================================
+     ESCAPE HTML
+     ========================================================= */
+
+  function escapeHtml(
+      value
+  ) {
+
+      if (
+          value === null ||
+          value === undefined
+      ) {
+          return "";
+      }
+
+
+      return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+
+  }
+
+
+  /* =========================================================
+     LOAD EXISTING QUESTIONS
+     ========================================================= */
+
+  function loadExistingQuestions() {
+
+      if (
+          !Array.isArray(
+              examData.questionData
+          )
+      ) {
+          return;
+      }
+
+
+      examData.questionData.forEach(
+          function(questionData) {
+
+              questionIndex++;
+
+              createQuestion(
+                  questionData
+              );
+
+          }
+      );
+
+
+      renumberQuestions();
+
+      updateEmptyState();
+
+  }
+  /* =========================================================
+     COLLECT QUESTION DATA
+     ========================================================= */
+
+  function collectQuestionData() {
+
+      const questions = [];
+
+      const questionCards =
+          document.querySelectorAll(
+              ".question-card"
+          );
+
+
+      questionCards.forEach(
+          function(card) {
+
+              const type =
+                  card.querySelector(
+                      ".question-type"
+                  ).value;
+
+
+              const content =
+                  card.querySelector(
+                      ".question-content"
+                  ).value.trim();
+
+
+              const question = {
+                  type: type,
+                  content: content
+              };
+
+
+              /* =================================================
+                 MCQ
+                 ================================================= */
+
+              if (type === "MCQ") {
+
+                  const choices = [];
+
+                  [
+                      "A",
+                      "B",
+                      "C",
+                      "D"
+                  ].forEach(
+                      function(label) {
+
+                          const input =
+                              card.querySelector(
+                                  ".choice-" + label
+                              );
+
+                          choices.push({
+                              label: label,
+                              text: input
+                                  ? input.value.trim()
+                                  : ""
+                          });
+
+                      }
+                  );
+
+
+                  const correctSelect =
+                      card.querySelector(
+                          ".correct-answer"
+                      );
+
+
+                  question.choices =
+                      choices;
+
+                  question.correct_answer =
+                      correctSelect
+                          ? correctSelect.value
+                          : "";
+
+              }
+
+
+              /* =================================================
+                 DRAG / SORT
+                 ================================================= */
+
+              else if (
+                  type === "DRAG" ||
+                  type === "SORT"
+              ) {
+
+                  const items = [];
+
+                  const itemInputs =
+                      card.querySelectorAll(
+                          ".dynamic-item-input"
+                      );
+
+
+                  itemInputs.forEach(
+                      function(input, index) {
+
+                          items.push({
+                              text: input.value.trim(),
+                              correct_order:
+                                  index + 1
+                          });
+
+                      }
+                  );
+
+
+                  question.items =
+                      items;
+
+                  if (type === "DRAG") {
+                      const templateInput = card.querySelector(".code-template-input");
+                      question.code_template = templateInput
+                          ? templateInput.value
+                          : "";
+                  }
+
+              }
+
+
+              /* =================================================
+                 CODE
+                 ================================================= */
+
+              else if (type === "CODE") {
+
+                  const language =
+                      card.querySelector(
+                          ".code-language"
+                      );
+
+                  const functionName =
+                      card.querySelector(
+                          ".function-name"
+                      );
+
+                  const starterCode =
+                      card.querySelector(
+                          ".starter-code"
+                      );
+
+
+                  question.language =
+                      language
+                          ? language.value
+                          : "cpp";
+
+
+                  question.function_name =
+                      functionName
+                          ? functionName.value.trim()
+                          : "";
+
+
+                  question.starter_code =
+                      starterCode
+                          ? starterCode.value
+                          : "";
+
+
+                  const testCases = [];
+
+                  const testcaseCards =
+                      card.querySelectorAll(
+                          ".testcase-card"
+                      );
+
+
+                  testcaseCards.forEach(
+                      function(testcase) {
+
+                          const input =
+                              testcase.querySelector(
+                                  ".test-input"
+                              );
+
+                          const output =
+                              testcase.querySelector(
+                                  ".test-output"
+                              );
+
+                          const score =
+                              testcase.querySelector(
+                                  ".test-score"
+                              );
+
+
+                          testCases.push({
+
+                              input:
+                                  input
+                                      ? input.value
+                                      : "",
+
+                              expected_output:
+                                  output
+                                      ? output.value
+                                      : "",
+
+                              score:
+                                  score
+                                      ? Number(
+                                          score.value
+                                      )
+                                      : 1
+
+                          });
+
+                      }
+                  );
+
+
+                  question.test_cases =
+                      testCases;
+
+              }
+
+
+              questions.push(
+                  question
+              );
+
+          }
+      );
+
+
+      return questions;
+
+  }
+
+
+  /* =========================================================
+     SAVE EXAM
+     ========================================================= */
+
+  document
+      .getElementById("save-exam")
+      .addEventListener(
+          "click",
+          function() {
+
+              const title =
+                  document.getElementById(
+                      "exam-title"
+                  ).value.trim();
+
+
+              const course =
+                  document.getElementById(
+                      "exam-course"
+                  ).value;
+
+
+              const offering =
+                  document.getElementById(
+                      "exam-offering"
+                  ).value;
+
+
+              const duration =
+                  document.getElementById(
+                      "exam-duration"
+                  ).value;
+
+
+              const start =
+                  document.getElementById(
+                      "exam-start"
+                  ).value;
+
+
+              const end =
+                  document.getElementById(
+                      "exam-end"
+                  ).value;
+
+
+              const papers =
+                  document.getElementById(
+                      "exam-papers"
+                  ).value;
+
+
+              /* ---------------------------------------------
+                 CHECK BASIC DATA
+                 --------------------------------------------- */
+
+              if (!title) {
+
+                  alert(
+                      "Vui lòng nhập tên bài thi."
+                  );
+
+                  return;
+
+              }
+
+
+              if (!course) {
+
+                  alert(
+                      "Vui lòng chọn môn học."
+                  );
+
+                  return;
+
+              }
+
+
+              if (!duration || Number(duration) <= 0) {
+
+                  alert(
+                      "Thời gian làm bài không hợp lệ."
+                  );
+
+                  return;
+
+              }
+
+
+              if (!papers || Number(papers) <= 0) {
+
+                  alert(
+                      "Số mã đề phải lớn hơn 0."
+                  );
+
+                  return;
+
+              }
+
+
+              /* ---------------------------------------------
+                 QUESTIONS
+                 --------------------------------------------- */
+
+              const questions =
+                  collectQuestionData();
+
+
+              if (questions.length === 0) {
+
+                  alert(
+                      "Bài thi phải có ít nhất 1 câu hỏi."
+                  );
+
+                  return;
+
+              }
+
+
+              /* ---------------------------------------------
+                 PUT DATA INTO HIDDEN FORM
+                 --------------------------------------------- */
+
+              document.getElementById(
+                  "save-title"
+              ).value = title;
+
+
+              document.getElementById(
+                  "save-course"
+              ).value = course;
+
+
+              document.getElementById(
+                  "save-offering"
+              ).value = offering;
+
+
+              document.getElementById(
+                  "save-duration"
+              ).value = duration;
+
+
+              document.getElementById(
+                  "save-start"
+              ).value = start;
+
+
+              document.getElementById(
+                  "save-end"
+              ).value = end;
+
+
+              document.getElementById(
+                  "save-papers"
+              ).value = papers;
+
+
+              document.getElementById(
+                  "save-question-data"
+              ).value =
+                  JSON.stringify(
+                      questions
+                  );
+
+
+              /* ---------------------------------------------
+                 SUBMIT
+                 --------------------------------------------- */
+
+              document.getElementById(
+                  "exam-save-form"
+              ).submit();
+
+          }
+      );
+
+  /* =========================================================
+     INITIALIZE
+     ========================================================= */
+
+  document.addEventListener(
+      "DOMContentLoaded",
+      function() {
+
+          filterOfferings();
+
+          loadExistingQuestions();
+
+      }
+  );
+</script>
+
+{% endblock %}

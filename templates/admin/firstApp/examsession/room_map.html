@@ -1,0 +1,673 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}
+    Sơ đồ phòng thi
+{% endblock %}
+
+{% block content %}
+
+<div class="room-page">
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
+    <div class="room-header">
+
+        <div>
+            <h1>Sơ đồ phòng thi</h1>
+
+            <p class="room-subtitle">
+                {{ session.exam.title }}
+            </p>
+        </div>
+
+        <div class="room-info">
+
+            <div class="info-item">
+                <span class="label">Phòng thi</span>
+                <strong>{{ session.room }}</strong>
+            </div>
+
+            <div class="info-item">
+                <span class="label">Lớp học phần</span>
+                <strong>{{ session.offering }}</strong>
+            </div>
+
+            <div class="info-item">
+                <span class="label">Số máy</span>
+                <strong>{{ session.machine_count }}</strong>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         THỐNG KÊ
+    ====================================================== -->
+
+    <div class="statistics">
+
+        <div class="stat-card">
+            <div class="stat-number">{{ total_computers }}</div>
+            <div class="stat-label">Tổng số máy</div>
+        </div>
+
+        <div class="stat-card assigned">
+            <div class="stat-number">{{ assigned_count }}</div>
+            <div class="stat-label">Đã gán sinh viên</div>
+        </div>
+
+        <div class="stat-card available">
+            <div class="stat-number">{{ available_count }}</div>
+            <div class="stat-label">Máy trống</div>
+        </div>
+
+        <div class="stat-card absent">
+            <div class="stat-number">{{ absent_count }}</div>
+            <div class="stat-label">Vắng</div>
+        </div>
+
+        <div class="stat-card locked">
+            <div class="stat-number">{{ locked_count }}</div>
+            <div class="stat-label">Đã khóa</div>
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         CHÚ THÍCH
+    ====================================================== -->
+
+    <div class="legend">
+
+        <div>
+            <span class="legend-box assigned"></span>
+            Đã gán
+        </div>
+
+        <div>
+            <span class="legend-box available"></span>
+            Trống
+        </div>
+
+        <div>
+            <span class="legend-box absent"></span>
+            Vắng
+        </div>
+
+        <div>
+            <span class="legend-box locked"></span>
+            Đã khóa
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         DANH SÁCH MÁY
+    ====================================================== -->
+
+    <div class="computer-grid">
+
+        {% for computer in computers %}
+
+            <div class="computer-card {{ computer.status }}">
+
+                <div class="computer-header">
+
+                    <span class="computer-number">
+                        PC{{ computer.computer_number|stringformat:"02d" }}
+                    </span>
+
+                    {% if computer.status == "assigned" %}
+                        <span class="status-badge">
+                            Đã gán
+                        </span>
+
+                    {% elif computer.status == "available" %}
+                        <span class="status-badge">
+                            Trống
+                        </span>
+
+                    {% elif computer.status == "absent" %}
+                        <span class="status-badge">
+                            Vắng
+                        </span>
+
+                    {% elif computer.status == "locked" %}
+                        <span class="status-badge">
+                            Đã khóa
+                        </span>
+                    {% endif %}
+
+                </div>
+
+
+                <div class="computer-body">
+
+                    {% if computer.student %}
+
+                        <div class="student-icon">
+                            👤
+                        </div>
+
+                        <div class="student-name">
+
+                            {{ computer.student.user.get_full_name|default:computer.student.user.username }}
+
+                        </div>
+
+                        <div class="student-id">
+
+                            MSSV:
+                            {{ computer.student.student_id }}
+
+                        </div>
+
+                        {% if computer.student.class_name %}
+
+                            <div class="student-class">
+
+                                Lớp:
+                                {{ computer.student.class_name }}
+
+                            </div>
+
+                        {% endif %}
+
+                    {% else %}
+
+                        <div class="empty-icon">
+                            —
+                        </div>
+
+                        <div class="empty-text">
+                            Chưa có sinh viên
+                        </div>
+
+                    {% endif %}
+
+                </div>
+
+
+                <div class="computer-footer">
+
+                    {% if computer.assigned_at %}
+
+                        Gán lúc:
+                        {{ computer.assigned_at|date:"H:i:s d/m/Y" }}
+
+                    {% else %}
+
+                        Chưa gán
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        {% empty %}
+
+            <div class="empty-room">
+
+                <h2>Chưa có máy thi</h2>
+
+                <p>
+                    Hãy sử dụng chức năng
+                    <strong>
+                        "Tạo máy thi và tự động xếp sinh viên"
+                    </strong>
+                    trong trang quản lý ca thi.
+                </p>
+
+            </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <!-- =====================================================
+         NÚT QUAY LẠI
+    ====================================================== -->
+
+    <div class="room-actions">
+
+        <a
+            href="{% url 'admin:firstApp_examsession_changelist' %}"
+            class="button"
+        >
+            ← Quay lại danh sách ca thi
+        </a>
+
+    </div>
+
+</div>
+
+
+<style>
+
+    .room-page {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+
+    /* =========================
+       HEADER
+    ========================= */
+
+    .room-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+
+        background: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+
+    .room-header h1 {
+        margin: 0 0 8px 0;
+        font-size: 28px;
+        color: #333;
+    }
+
+    .room-subtitle {
+        margin: 0;
+        color: #666;
+        font-size: 15px;
+    }
+
+
+    .room-info {
+        display: flex;
+        gap: 35px;
+    }
+
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .info-item .label {
+        font-size: 12px;
+        color: #888;
+        text-transform: uppercase;
+    }
+
+    .info-item strong {
+        font-size: 16px;
+        color: #333;
+    }
+
+
+    /* =========================
+       STATISTICS
+       ========================= */
+
+    .statistics {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 15px;
+
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        background: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+
+        padding: 18px;
+
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 28px;
+        font-weight: bold;
+        color: #333;
+    }
+
+    .stat-label {
+        margin-top: 5px;
+        color: #777;
+        font-size: 13px;
+    }
+
+
+    /* =========================
+       LEGEND
+       ========================= */
+
+    .legend {
+        display: flex;
+        gap: 25px;
+
+        background: #ffffff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+
+        padding: 15px 20px;
+        margin-bottom: 20px;
+    }
+
+    .legend > div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        font-size: 13px;
+        color: #555;
+    }
+
+    .legend-box {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        display: inline-block;
+    }
+
+    .legend-box.assigned {
+        background: #d9f7df;
+        border: 1px solid #52a85d;
+    }
+
+    .legend-box.available {
+        background: #eeeeee;
+        border: 1px solid #999;
+    }
+
+    .legend-box.absent {
+        background: #fff3cd;
+        border: 1px solid #d39e00;
+    }
+
+    .legend-box.locked {
+        background: #f8d7da;
+        border: 1px solid #dc3545;
+    }
+
+
+    /* =========================
+       COMPUTER GRID
+       ========================= */
+
+    .computer-grid {
+        display: grid;
+
+        grid-template-columns:
+            repeat(4, minmax(180px, 1fr));
+
+        gap: 18px;
+    }
+
+
+    /* =========================
+       COMPUTER CARD
+       ========================= */
+
+    .computer-card {
+
+        background: #ffffff;
+
+        border: 2px solid #ddd;
+
+        border-radius: 10px;
+
+        overflow: hidden;
+
+        min-height: 180px;
+
+        box-shadow:
+            0 2px 5px rgba(0, 0, 0, 0.06);
+
+        transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
+    }
+
+    .computer-card:hover {
+
+        transform: translateY(-2px);
+
+        box-shadow:
+            0 5px 15px rgba(0, 0, 0, 0.10);
+    }
+
+
+    /* =========================
+       STATUS
+       ========================= */
+
+    .computer-card.assigned {
+        border-color: #52a85d;
+    }
+
+    .computer-card.available {
+        border-color: #aaa;
+    }
+
+    .computer-card.absent {
+        border-color: #d39e00;
+    }
+
+    .computer-card.locked {
+        border-color: #dc3545;
+    }
+
+
+    /* =========================
+       CARD HEADER
+       ========================= */
+
+    .computer-header {
+
+        display: flex;
+
+        justify-content: space-between;
+        align-items: center;
+
+        padding: 12px 14px;
+
+        background: #f5f5f5;
+
+        border-bottom: 1px solid #ddd;
+    }
+
+    .computer-number {
+
+        font-size: 18px;
+
+        font-weight: bold;
+
+        color: #333;
+    }
+
+    .status-badge {
+
+        font-size: 11px;
+
+        padding: 4px 8px;
+
+        border-radius: 12px;
+
+        background: #eeeeee;
+
+        color: #555;
+    }
+
+
+    /* =========================
+       CARD BODY
+       ========================= */
+
+    .computer-body {
+
+        min-height: 105px;
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        justify-content: center;
+
+        text-align: center;
+
+        padding: 12px;
+    }
+
+    .student-icon {
+
+        font-size: 26px;
+
+        margin-bottom: 5px;
+    }
+
+    .student-name {
+
+        font-size: 15px;
+
+        font-weight: bold;
+
+        color: #333;
+    }
+
+    .student-id {
+
+        margin-top: 4px;
+
+        font-size: 12px;
+
+        color: #666;
+    }
+
+    .student-class {
+
+        margin-top: 2px;
+
+        font-size: 12px;
+
+        color: #888;
+    }
+
+    .empty-icon {
+
+        font-size: 30px;
+
+        color: #aaa;
+    }
+
+    .empty-text {
+
+        margin-top: 5px;
+
+        color: #999;
+
+        font-size: 13px;
+    }
+
+
+    /* =========================
+       FOOTER
+       ========================= */
+
+    .computer-footer {
+
+        border-top: 1px solid #eee;
+
+        padding: 8px 12px;
+
+        font-size: 11px;
+
+        color: #999;
+
+        text-align: center;
+    }
+
+
+    /* =========================
+       EMPTY ROOM
+       ========================= */
+
+    .empty-room {
+
+        grid-column: 1 / -1;
+
+        background: #ffffff;
+
+        border: 1px dashed #aaa;
+
+        border-radius: 8px;
+
+        padding: 50px;
+
+        text-align: center;
+    }
+
+
+    /* =========================
+       ACTION
+       ========================= */
+
+    .room-actions {
+
+        margin-top: 25px;
+    }
+
+
+    /* =========================
+       RESPONSIVE
+       ========================= */
+
+    @media (max-width: 1100px) {
+
+        .computer-grid {
+            grid-template-columns:
+                repeat(3, minmax(180px, 1fr));
+        }
+
+        .statistics {
+            grid-template-columns:
+                repeat(3, 1fr);
+        }
+
+        .room-header {
+            flex-direction: column;
+            gap: 20px;
+        }
+    }
+
+
+    @media (max-width: 700px) {
+
+        .computer-grid {
+            grid-template-columns:
+                repeat(2, minmax(160px, 1fr));
+        }
+
+        .statistics {
+            grid-template-columns:
+                repeat(2, 1fr);
+        }
+
+        .room-info {
+            flex-wrap: wrap;
+        }
+    }
+
+</style>
+
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block body_block %}
+
+<main class="teacher-results-page">
+
+  <header class="page-heading">
+
+    <p class="eyebrow">
+      GIẢNG VIÊN · BÁO CÁO
+    </p>
+
+    <h1>
+      Kết quả các lớp phụ trách
+    </h1>
+
+    <p class="text-muted">
+      Chọn lớp học phần và bài thi để xem danh sách sinh viên, điểm và tải báo cáo.
+    </p>
+
+  </header>
+
+
+  {% for offering in offerings %}
+
+  <section class="teacher-offering-section">
+
+    <div class="teacher-offering-heading">
+
+      <div>
+
+        <span class="offering-code">
+          {{ offering.group_code }}
+        </span>
+
+        <h2>
+          {{ offering.course.code }} · {{ offering.course.name }}
+        </h2>
+
+        <p>
+          {{ offering.term }} · Ca {{ offering.session_number }}
+        </p>
+
+      </div>
+
+      <span class="offering-students">
+        {{ offering.enrollments.count }} sinh viên
+      </span>
+
+    </div>
+
+
+    <div class="teacher-exam-table-wrap">
+
+      <table class="table teacher-exam-table align-middle mb-0">
+
+        <thead>
+
+          <tr>
+            <th>Bài thi</th>
+            <th>Thời gian</th>
+            <th>Thời lượng</th>
+            <th class="text-end">Báo cáo</th>
+          </tr>
+
+        </thead>
+
+
+        <tbody>
+
+          {% for exam in offering.report_exams %}
+
+          <tr>
+
+            <!-- BÀI THI -->
+            <td>
+
+              <strong>
+                {{ exam.title }}
+              </strong>
+
+              <small>
+                {{ exam.number_of_papers }} mã đề
+              </small>
+
+            </td>
+
+
+            <!-- THỜI GIAN -->
+            <td>
+
+              {{ exam.start_time|date:"d/m/Y H:i" }}
+              –
+              {{ exam.end_time|date:"d/m/Y H:i" }}
+
+            </td>
+
+
+            <!-- THỜI LƯỢNG -->
+            <td>
+              {{ exam.duration_minutes }} phút
+            </td>
+
+
+            <!-- BÁO CÁO -->
+            <td class="text-end">
+
+              <a
+                class="btn btn-sm btn-outline-primary"
+                href="{% url 'teacher_exam_report' exam.id %}"
+                title="Xem kết quả lớp"
+              >
+
+                <i class="bi bi-eye"></i>
+
+                <span class="visually-hidden">
+                  Xem kết quả
+                </span>
+
+              </a>
+
+
+              <a
+                class="btn btn-sm btn-primary"
+                href="{% url 'teacher_exam_pdf' exam.id %}"
+                title="Tải báo cáo PDF"
+              >
+
+                <i class="bi bi-file-earmark-pdf"></i>
+
+                <span class="visually-hidden">
+                  Tải PDF
+                </span>
+
+              </a>
+
+            </td>
+
+          </tr>
+
+
+          {% empty %}
+
+          <tr>
+
+            <td
+              colspan="4"
+              class="text-muted py-4"
+            >
+              Lớp chưa có bài thi.
+            </td>
+
+          </tr>
+
+          {% endfor %}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+
+  {% empty %}
+
+  <p class="empty-state">
+    Bạn chưa được phân công lớp học phần nào.
+  </p>
+
+  {% endfor %}
+
+</main>
+
+{% endblock %}

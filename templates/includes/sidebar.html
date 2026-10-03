@@ -1,70 +1,218 @@
-<!--<div class="sidebar" id="sidebar">-->
+<aside class="sidebar" id="sidebar">
 
-<!--    <a href="/">-->
+  <!-- =========================================================
+       SIDEBAR IDENTITY
+       ========================================================= -->
 
-<!--        <i class="bi bi-house-fill"></i>-->
+  <div class="sidebar-identity">
 
-<!--        <span>Trang chủ</span>-->
+    <span class="sidebar-mark">
+      <i class="bi bi-mortarboard-fill"></i>
+    </span>
 
-<!--    </a>-->
+    <div class="sidebar-identity-copy">
 
-<!--    <a href="{% url 'course_list' %}">-->
+      <strong>STU Portal</strong>
 
-<!--        <i class="bi bi-book-fill"></i>-->
+      {% if request.user.is_authenticated %}
 
-<!--        <span>Khóa học</span>-->
+        <small>
+          {{ request.user.userprofile.get_role_display }}
+        </small>
 
-<!--    </a>-->
+      {% else %}
 
-<!--    <a href="#">-->
+        <small>Khảo thí trực tuyến</small>
 
-<!--        <i class="bi bi-pencil-square"></i>-->
+      {% endif %}
 
-<!--        <span>Bài thi</span>-->
+    </div>
 
-<!--    </a>-->
+  </div>
 
-<!--    <a href="#">-->
 
-<!--        <i class="bi bi-bar-chart-fill"></i>-->
+  <!-- =========================================================
+       WORKSPACE
+       ========================================================= -->
 
-<!--        <span>Điểm thi</span>-->
+  <p class="sidebar-label">
+    KHÔNG GIAN LÀM VIỆC
+  </p>
 
-<!--    </a>-->
 
-<!--    <a href="{% url 'profile' %}">-->
+  <nav class="sidebar-nav" aria-label="Điều hướng chính">
 
-<!--        <i class="bi bi-person-circle"></i>-->
-
-<!--        <span>Hồ sơ</span>-->
-
-<!--    </a>-->
-
-<!--</div>-->
-
-<div class="sidebar" id="sidebar">
-    <a href="{% url 'home' %}">
-        <i class="bi bi-house-fill"></i>
-        <span>Trang chủ</span>
+    <!-- TRANG CHỦ -->
+    <a
+      href="{% url 'home' %}"
+      class="{% if request.resolver_match.url_name == 'home' %}active{% endif %}"
+    >
+      <i class="bi bi-house-door"></i>
+      <span>Trang chủ</span>
     </a>
 
-    <a href="{% url 'course_list' %}">
-        <i class="bi bi-book-fill"></i>
+
+    {% if request.user.is_authenticated %}
+
+
+    <!-- =======================================================
+         KHÓA HỌC / LỚP PHỤ TRÁCH
+         ======================================================= -->
+
+    <a
+      href="{% url 'course_list' %}"
+      class="{% if request.resolver_match.url_name == 'course_list' %}active{% endif %}"
+    >
+
+      <i class="bi bi-journal-bookmark"></i>
+
+      {% if request.user.userprofile.role == "lecturer" %}
+
+        <span>Lớp phụ trách</span>
+
+      {% else %}
+
         <span>Khóa học</span>
+
+      {% endif %}
+
     </a>
 
-    <a href="{% url 'exam_list' %}">
-        <i class="bi bi-pencil-square"></i>
+
+    <!-- =======================================================
+         BÀI THI / QUẢN LÝ BÀI THI
+         ======================================================= -->
+
+    <a
+      href="{% url 'exam_list' %}"
+      class="{% if request.resolver_match.url_name == 'exam_list' %}active{% endif %}"
+    >
+
+      <i class="bi bi-pencil-square"></i>
+
+      {% if request.user.userprofile.role == "student" %}
+
         <span>Bài thi</span>
+
+      {% else %}
+
+        <span>Quản lý bài thi</span>
+
+      {% endif %}
+
     </a>
 
-    <a href="{% url 'exam_result_list' %}">
-        <i class="bi bi-bar-chart-fill"></i>
-        <span>Điểm thi</span>
+
+    <!-- =======================================================
+         KẾT QUẢ CỦA SINH VIÊN
+         ======================================================= -->
+
+    {% if request.user.userprofile.role == "student" %}
+
+      <a
+        href="{% url 'exam_result_list' %}"
+        class="{% if request.resolver_match.url_name == 'exam_result_list' %}active{% endif %}"
+      >
+
+        <i class="bi bi-graph-up-arrow"></i>
+        <span>Kết quả của tôi</span>
+
+      </a>
+
+    {% endif %}
+
+
+    <!-- =======================================================
+         KẾT QUẢ LỚP
+         Lecturer + Admin
+         ======================================================= -->
+
+    {% if request.user.userprofile.role == "lecturer" or request.user.userprofile.role == "admin" %}
+
+      <a
+        href="{% url 'teacher_results' %}"
+        class="{% if request.resolver_match.url_name == 'teacher_results' or request.resolver_match.url_name == 'teacher_exam_report' %}active{% endif %}"
+      >
+
+        <i class="bi bi-clipboard-data"></i>
+        <span>Kết quả lớp</span>
+
+      </a>
+
+    {% endif %}
+
+
+    <!-- =======================================================
+         HỒ SƠ CÁ NHÂN
+         ======================================================= -->
+
+    <a
+      href="{% url 'profile' %}"
+      class="{% if request.resolver_match.url_name == 'profile' %}active{% endif %}"
+    >
+
+      <i class="bi bi-person-vcard"></i>
+      <span>Hồ sơ cá nhân</span>
+
     </a>
 
-    <a href="{% url 'profile' %}">
-        <i class="bi bi-person-circle"></i>
-        <span>Hồ sơ</span>
-    </a>
-</div>
+
+    <!-- =======================================================
+         QUẢN TRỊ
+         ======================================================= -->
+
+    {% if request.user.is_staff or request.user.is_superuser %}
+
+      <p class="sidebar-label sidebar-label-spaced">
+        QUẢN TRỊ
+      </p>
+
+      <a href="{% url 'admin:index' %}">
+
+        <i class="bi bi-sliders"></i>
+
+        <span>Django Admin</span>
+
+        <i class="bi bi-box-arrow-up-right nav-external"></i>
+
+      </a>
+
+    {% endif %}
+
+
+    {% endif %}
+
+
+    <!-- =======================================================
+         CHƯA ĐĂNG NHẬP
+         ======================================================= -->
+
+    {% if not request.user.is_authenticated %}
+
+      <a href="{% url 'qr_login_page' %}">
+
+        <i class="bi bi-qr-code-scan"></i>
+        <span>Đăng nhập</span>
+
+      </a>
+
+    {% endif %}
+
+  </nav>
+
+
+  <!-- =========================================================
+       SIDEBAR FOOTER
+       ========================================================= -->
+
+  <div class="sidebar-footer">
+
+    <span class="status-dot"></span>
+
+    <span>Hệ thống STU</span>
+
+    <strong>2026</strong>
+
+  </div>
+
+</aside>

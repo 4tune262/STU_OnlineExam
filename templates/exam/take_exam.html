@@ -1,0 +1,2551 @@
+{% extends "base.html" %} {% load static %} {% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/exam_vscode.css' %}?v=20261001" />
+{% endblock %} {% block body_block %}
+
+<div class="exam-page">
+  <!-- =========================================================
+       TOP EXAM BAR
+       ========================================================= -->
+  <div class="exam-topbar">
+    <div class="exam-topbar-left">
+      <div class="exam-brand-mark">
+        <i class="bi bi-mortarboard-fill"></i>
+      </div>
+
+      <div class="exam-title-area">
+        <div class="exam-title">{{ exam.title }}</div>
+
+        <div class="exam-subtitle">
+          <span>
+            <i class="bi bi-book"></i>
+            {{ exam.course.name }}
+          </span>
+
+          <span class="exam-divider">•</span>
+
+          <span>
+            Mã đề:
+            <strong>{{ student_exam.exam_code }}</strong>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="exam-topbar-right">
+      <div class="autosave-indicator">
+        <span class="autosave-dot"></span>
+        <span id="autosave-status">Đã lưu nháp</span>
+      </div>
+
+      <div class="top-timer">
+        <i class="bi bi-clock-fill"></i>
+        <span id="time-left">--:--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MAIN LAYOUT
+       ========================================================= -->
+  <div class="exam-layout">
+    <!-- =======================================================
+         LEFT / MAIN CONTENT
+         ======================================================= -->
+    <main class="exam-main">
+      <!-- Progress -->
+      <div class="exam-progress-card">
+        <div class="progress-header">
+          <div>
+            <div class="progress-label">TIẾN ĐỘ BÀI THI</div>
+
+            <div class="progress-value">
+              <span id="answered-count">0</span>
+              / {{ total_questions }} câu đã trả lời
+            </div>
+          </div>
+
+          <div class="progress-percent" id="progress-percent">0%</div>
+        </div>
+
+        <div class="progress-track">
+          <div
+            id="exam-progress-bar"
+            class="progress-fill"
+            style="width: 0%"
+          ></div>
+        </div>
+      </div>
+
+      <form
+        id="examForm"
+        method="POST"
+        action="{% url 'submit_exam' student_exam.id %}"
+        onsubmit="return handleBeforeSubmit();"
+      >
+        {% csrf_token %}
+
+        <input
+          type="hidden"
+          id="student_exam_id"
+          value="{{ student_exam.id }}"
+        />
+
+        <!-- =====================================================
+             QUESTIONS
+             ===================================================== -->
+        {% for question in questions %}
+
+        <section
+          class="question-card"
+          id="q-block-{{ question.index }}"
+          data-question-index="{{ question.index }}"
+          data-question-type="{{ question.type }}"
+        >
+          <!-- Question header -->
+          <div class="question-header">
+            <div class="question-number">CÂU {{ forloop.counter }}</div>
+
+            <div class="question-meta">
+              <span class="question-type type-{{ question.type|lower }}">
+                {% if question.type == "MCQ" %}
+                <i class="bi bi-ui-radios-grid"></i>
+                Trắc nghiệm {% elif question.type == "DRAG" %}
+                <i class="bi bi-arrows-move"></i>
+                Kéo thả {% elif question.type == "SORT" %}
+                <i class="bi bi-list-ol"></i>
+                Sắp xếp {% elif question.type == "CODE" %}
+                <i class="bi bi-code-slash"></i>
+                Lập trình {% endif %}
+              </span>
+
+              {% if question.difficulty %}
+              <span class="question-difficulty">
+                {{ question.difficulty }}
+              </span>
+              {% endif %}
+
+              <span class="question-score"> {{ question.score }} điểm </span>
+            </div>
+          </div>
+
+          <!-- Question title -->
+          <div class="question-body">
+            <h2 class="question-title">{{ question.title }}</h2>
+
+            <!-- =================================================
+                 MCQ
+                 ================================================= -->
+            {% if question.type == "MCQ" %}
+
+            <div class="answer-instruction">
+              <i class="bi bi-info-circle"></i>
+              Chọn một đáp án đúng.
+            </div>
+
+            <div class="mcq-options">
+              {% for choice in question.choices %}
+
+              <label class="mcq-option">
+                <input
+                  type="radio"
+                  name="question_{{ question.index }}"
+                  value="{{ choice.index }}"
+                  autocomplete="off"
+                />
+
+                <span class="mcq-letter"> {{ choice.display_letter }} </span>
+
+                <span class="mcq-content"> {{ choice.text }} </span>
+
+                <span class="mcq-check">
+                  <i class="bi bi-check-lg"></i>
+                </span>
+              </label>
+
+              {% endfor %}
+            </div>
+
+            <!-- =================================================
+                 DRAG
+                 ================================================= -->
+            {% elif question.type == "DRAG" %}
+
+            <div class="answer-instruction">
+              <i class="bi bi-mouse"></i>
+              Kéo các item vào đúng vị trí
+              <strong>[[1]] → [[6]]</strong>.
+            </div>
+
+            <div class="drag-editor">
+              <div class="editor-window">
+                <div class="editor-titlebar">
+                  <div class="editor-lights">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+
+                  <div class="editor-tab">
+                    <i class="bi bi-filetype-cpp"></i>
+                    question_{{ question.index }}.cpp
+                  </div>
+                </div>
+
+                <div
+                  class="drag-code-area"
+                  data-template="{{ question.code_template }}"
+                  data-question="{{ question.index }}"
+                ></div>
+              </div>
+            </div>
+
+            <div class="drag-pool-title">
+              <span>
+                <i class="bi bi-box-seam"></i>
+                Kho item
+              </span>
+
+              <span class="drag-help"> Kéo item vào vị trí trống </span>
+            </div>
+
+            <div
+              class="drag-source-pool"
+              id="drag-pool-{{ question.index }}"
+              data-question="{{ question.index }}"
+            >
+              {% for item in question.items %}
+
+              <div
+                class="drag-token"
+                id="drag-token-{{ question.index }}-{{ forloop.counter }}"
+                draggable="true"
+                data-value="{{ item.text }}"
+                data-question="{{ question.index }}"
+              >
+                <span class="drag-token-icon">
+                  <i class="bi bi-grip-vertical"></i>
+                </span>
+
+                <code>{{ item.text }}</code>
+              </div>
+
+              {% endfor %}
+            </div>
+
+            <input
+              type="hidden"
+              name="sorted_ids_{{ question.index }}"
+              id="drag-answer-{{ question.index }}"
+            />
+
+            <!-- =================================================
+                 SORT
+                 ================================================= -->
+            {% elif question.type == "SORT" %}
+
+            <div class="answer-instruction">
+              <i class="bi bi-arrows-vertical"></i>
+              Kéo các dòng code sang khu vực bên phải và sắp xếp theo đúng thứ
+              tự.
+            </div>
+
+            <div class="sort-workspace">
+              <div class="sort-panel">
+                <div class="sort-panel-header sort-source-header">
+                  <span>
+                    <i class="bi bi-shuffle"></i>
+                    Code chưa sắp xếp
+                  </span>
+
+                  <span class="sort-count"> {{ question.items|length }} </span>
+                </div>
+
+                <div
+                  class="sort-zone sort-source-zone"
+                  id="sort-source-{{ question.index }}"
+                  data-question="{{ question.index }}"
+                >
+                  {% for item in question.items %}
+
+                  <div
+                    class="sort-code-item"
+                    id="sort-code-{{ question.index }}-{{ forloop.counter }}"
+                    draggable="true"
+                    data-value="{{ item.text }}"
+                    data-question="{{ question.index }}"
+                  >
+                    <span class="sort-drag-handle">
+                      <i class="bi bi-grip-vertical"></i>
+                    </span>
+
+                    <span class="sort-line-number">
+                      {{ forloop.counter }}
+                    </span>
+
+                    <code>{{ item.text }}</code>
+                  </div>
+
+                  {% endfor %}
+                </div>
+              </div>
+
+              <div class="sort-arrow">
+                <i class="bi bi-arrow-right"></i>
+              </div>
+
+              <div class="sort-panel">
+                <div class="sort-panel-header sort-answer-header">
+                  <span>
+                    <i class="bi bi-check2-circle"></i>
+                    Thứ tự câu trả lời
+                  </span>
+
+                  <span class="sort-count" id="sort-count-{{ question.index }}">
+                    0
+                  </span>
+                </div>
+
+                <div
+                  class="sort-zone sort-answer-zone"
+                  id="sort-answer-{{ question.index }}"
+                  data-question="{{ question.index }}"
+                >
+                  <div class="sort-empty">
+                    <i class="bi bi-box-arrow-in-down"></i>
+
+                    <span> Kéo dòng code vào đây </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <input
+              type="hidden"
+              name="sorted_ids_{{ question.index }}"
+              id="sort-answer-input-{{ question.index }}"
+            />
+
+            <!-- =================================================
+                 CODE
+                 ================================================= -->
+            {% elif question.type == "CODE" %}
+
+            <div class="answer-instruction code-instruction">
+              <div>
+                <i class="bi bi-terminal"></i>
+                Viết chương trình C++ của bạn.
+              </div>
+
+              <span class="language-chip">
+                <i class="bi bi-c-circle"></i>
+                C++
+              </span>
+            </div>
+
+            <div class="vscode-editor">
+              <!-- VSCode title bar -->
+              <div class="vscode-titlebar">
+                <div class="vscode-window-buttons">
+                  <span class="vscode-red"></span>
+                  <span class="vscode-yellow"></span>
+                  <span class="vscode-green"></span>
+                </div>
+
+                <div class="vscode-tab">
+                  <i class="bi bi-filetype-cpp"></i>
+                  main.cpp
+                </div>
+
+                <div class="vscode-titlebar-spacer"></div>
+
+                <span class="vscode-language"> C++ </span>
+              </div>
+
+              <!-- VSCode editor toolbar -->
+              <div class="vscode-toolbar">
+                <span>
+                  <i class="bi bi-folder2-open"></i>
+                  STU Online Examination
+                </span>
+
+                <span>
+                  <i class="bi bi-git"></i>
+                  main.cpp
+                </span>
+              </div>
+
+              <!-- Editor -->
+              <div class="vscode-editor-body">
+                <div
+                  class="vscode-line-numbers"
+                  id="line-numbers-{{ question.index }}"
+                ></div>
+
+                <textarea
+                  class="vscode-code-input"
+                  name="code_answer_{{ question.index }}"
+                  id="code-{{ question.index }}"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  data-question="{{ question.index }}"
+                >
+{{ question.starter_code }}</textarea
+                >
+              </div>
+
+              <!-- Status bar -->
+              <div class="vscode-statusbar">
+                <span>
+                  <i class="bi bi-git"></i>
+                  main
+                </span>
+
+                <span> UTF-8 </span>
+
+                <span> C++ </span>
+
+                <span>
+                  Ln <span id="cursor-line-{{ question.index }}">1</span>, Col
+                  <span id="cursor-col-{{ question.index }}">1</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Code actions -->
+            <div class="code-actions">
+              <button
+                type="button"
+                class="btn-run-code"
+                onclick="runStudentCode('{{ question.index }}')"
+              >
+                <i class="bi bi-play-fill"></i>
+                Chạy thử
+              </button>
+
+              <span class="code-run-hint">
+                Chạy code với test case của câu hỏi
+              </span>
+            </div>
+
+            <!-- Compiler result -->
+            <div
+              id="compiler-result-{{ question.index }}"
+              class="compiler-panel"
+              hidden
+            >
+              <div class="compiler-header">
+                <span>
+                  <i class="bi bi-terminal"></i>
+                  OUTPUT
+                </span>
+
+                <button
+                  type="button"
+                  onclick="closeCompilerResult('{{ question.index }}')"
+                >
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+
+              <pre
+                id="output-content-{{ question.index }}"
+                class="compiler-output"
+              ></pre>
+            </div>
+
+            {% endif %}
+          </div>
+
+          <!-- Question footer -->
+          <div class="question-footer">
+            <span class="question-status unanswered">
+              <i class="bi bi-circle"></i>
+              Chưa trả lời
+            </span>
+
+            <span class="question-index-label">
+              {{ forloop.counter }} / {{ total_questions }}
+            </span>
+          </div>
+        </section>
+
+        {% endfor %}
+
+        <!-- =====================================================
+             SUBMIT AREA
+             ===================================================== -->
+        <div class="exam-submit-card">
+          <div class="submit-warning">
+            <div class="submit-warning-icon">
+              <i class="bi bi-exclamation-triangle"></i>
+            </div>
+
+            <div>
+              <strong> Kiểm tra bài trước khi nộp </strong>
+
+              <p>Sau khi nộp bài, bạn sẽ không thể thay đổi câu trả lời.</p>
+            </div>
+          </div>
+
+          <div class="submit-actions">
+            <span id="autosave-status-bottom" class="draft-status">
+              <i class="bi bi-cloud-check"></i>
+              Bản nháp đã được lưu
+            </span>
+
+            <button type="submit" class="btn-submit-exam">
+              <i class="bi bi-send-check-fill"></i>
+              Nộp bài thi
+            </button>
+          </div>
+        </div>
+      </form>
+    </main>
+
+    <!-- =======================================================
+         RIGHT SIDEBAR
+         ======================================================= -->
+    <aside class="exam-sidebar">
+      <div class="sidebar-sticky">
+        <!-- Timer -->
+        <div class="sidebar-card timer-card">
+          <div class="timer-card-label">
+            <i class="bi bi-stopwatch"></i>
+            THỜI GIAN CÒN LẠI
+          </div>
+
+          <div id="timer-display" class="sidebar-timer">--:--</div>
+
+          <div class="timer-status">
+            <span class="timer-live-dot"></span>
+            Bài thi đang diễn ra
+          </div>
+        </div>
+
+        <!-- Question navigation -->
+        <div class="sidebar-card">
+          <div class="sidebar-card-title">
+            <span>
+              <i class="bi bi-grid-3x3-gap-fill"></i>
+              Danh sách câu hỏi
+            </span>
+
+            <span class="nav-count"> {{ total_questions }} </span>
+          </div>
+
+          <div class="question-nav-grid">
+            {% for question in questions %}
+
+            <a
+              href="#q-block-{{ question.index }}"
+              class="question-nav-btn"
+              data-question-nav="q-block-{{ question.index }}"
+              data-question-index="{{ question.index }}"
+            >
+              {{ forloop.counter }}
+            </a>
+
+            {% endfor %}
+          </div>
+
+          <div class="nav-legend">
+            <div>
+              <span class="legend-dot current"></span>
+              Đang xem
+            </div>
+
+            <div>
+              <span class="legend-dot answered"></span>
+              Đã trả lời
+            </div>
+
+            <div>
+              <span class="legend-dot empty"></span>
+              Chưa trả lời
+            </div>
+          </div>
+        </div>
+
+        <!-- Exam information -->
+        <div class="sidebar-card exam-info-card">
+          <div class="sidebar-card-title">
+            <i class="bi bi-info-circle-fill"></i>
+            Thông tin bài thi
+          </div>
+
+          <div class="exam-info-row">
+            <span>Môn học</span>
+
+            <strong> {{ exam.course.name }} </strong>
+          </div>
+
+          <div class="exam-info-row">
+            <span>Số câu</span>
+
+            <strong> {{ total_questions }} </strong>
+          </div>
+
+          <div class="exam-info-row">
+            <span>Thời lượng</span>
+
+            <strong> {{ exam.duration_minutes }} phút </strong>
+          </div>
+
+          <div class="exam-info-row">
+            <span>Mã đề</span>
+
+            <strong> {{ student_exam.exam_code }} </strong>
+          </div>
+        </div>
+
+        <!-- Proctor -->
+        {% if proctoring_enabled %}
+
+        <div class="sidebar-card proctor-card">
+          <div class="sidebar-card-title">
+            <i class="bi bi-camera-video-fill"></i>
+            Giám sát AI
+          </div>
+
+          <video
+            id="proctor-video"
+            class="proctor-video"
+            muted
+            playsinline
+          ></video>
+
+          <button type="button" id="start-proctoring" class="btn-proctor">
+            <i class="bi bi-camera-video"></i>
+            Cho phép webcam
+          </button>
+
+          <p id="proctor-status" class="proctor-status">
+            Camera chưa được bật.
+          </p>
+
+          <div id="proctor-warning" class="proctor-warning" hidden></div>
+        </div>
+
+        {% else %}
+
+        <div class="sidebar-card proctor-disabled">
+          <div class="proctor-disabled-icon">
+            <i class="bi bi-camera-video-off"></i>
+          </div>
+
+          <div>
+            <strong> Giám sát AI </strong>
+
+            <p>Chưa cấu hình. Bài thi vẫn hoạt động bình thường.</p>
+          </div>
+        </div>
+
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- =========================================================
+     JAVASCRIPT
+     ========================================================= -->
+
+<script src="{% static 'js/exam_interaction.js' %}"></script>
+
+<script>
+
+  const examForm = document.getElementById("examForm");
+  const studentExamId =
+      document.getElementById("student_exam_id").value;
+
+  const csrfToken =
+      document.querySelector(
+          '[name="csrfmiddlewaretoken"]'
+      ).value;
+
+
+  /* =========================================================
+     TIMER
+     ========================================================= */
+
+  let totalTime = Number("{{ remaining_seconds }}");
+
+  const timerDisplay =
+      document.getElementById("time-left");
+
+  const mainTimerDisplay =
+      document.getElementById("timer-display");
+
+  let countdown = null;
+
+
+  function formatTime(seconds) {
+
+      seconds = Math.max(
+          0,
+          Number(seconds) || 0
+      );
+
+      const hours =
+          Math.floor(seconds / 3600);
+
+      const minutes =
+          Math.floor(
+              (seconds % 3600) / 60
+          );
+
+      const secs =
+          seconds % 60;
+
+      if (hours > 0) {
+
+          return (
+              String(hours).padStart(2, "0")
+              + ":"
+              + String(minutes).padStart(2, "0")
+              + ":"
+              + String(secs).padStart(2, "0")
+          );
+
+      }
+
+      return (
+          String(minutes).padStart(2, "0")
+          + ":"
+          + String(secs).padStart(2, "0")
+      );
+  }
+
+
+  function updateTimer() {
+
+      const formatted =
+          formatTime(totalTime);
+
+      timerDisplay.textContent =
+          formatted;
+
+      mainTimerDisplay.textContent =
+          formatted;
+
+      const timerCard =
+          document.querySelector(".timer-card");
+
+      if (totalTime <= 300) {
+          timerCard.classList.add("timer-danger");
+      } else if (totalTime <= 600) {
+          timerCard.classList.add("timer-warning");
+      }
+
+  }
+
+
+  updateTimer();
+
+
+  countdown = setInterval(
+      function() {
+
+          totalTime--;
+
+          updateTimer();
+
+          if (totalTime <= 0) {
+
+              clearInterval(countdown);
+
+              alert(
+                  "Hết giờ làm bài. Hệ thống sẽ tự động nộp bài."
+              );
+
+              handleBeforeSubmit();
+
+              examForm.submit();
+          }
+
+      },
+      1000
+  );
+
+
+  /* =========================================================
+     PROGRESS
+     ========================================================= */
+
+  function updateProgress() {
+
+      let answered = 0;
+
+      document
+          .querySelectorAll(".question-card")
+          .forEach(function(card) {
+
+              const type =
+                  card.dataset.questionType;
+
+              let hasAnswer = false;
+
+
+              if (type === "MCQ") {
+
+                  hasAnswer =
+                      Boolean(
+                          card.querySelector(
+                              'input[type="radio"]:checked'
+                          )
+                      );
+
+              }
+
+
+              else if (type === "DRAG") {
+
+                  const input =
+                      card.querySelector(
+                          'input[name^="sorted_ids_"]'
+                      );
+
+                  if (input && input.value) {
+
+                      try {
+
+                          const values =
+                              JSON.parse(input.value);
+
+                          hasAnswer =
+                              values.some(
+                                  value =>
+                                      value !== null &&
+                                      value !== ""
+                              );
+
+                      } catch (error) {}
+
+                  }
+
+              }
+
+
+              else if (type === "SORT") {
+
+                  const input =
+                      card.querySelector(
+                          'input[name^="sorted_ids_"]'
+                      );
+
+                  if (input && input.value) {
+
+                      try {
+
+                          const values =
+                              JSON.parse(input.value);
+
+                          hasAnswer =
+                              values.length > 0;
+
+                      } catch (error) {}
+
+                  }
+
+              }
+
+
+              else if (type === "CODE") {
+
+                  const editor =
+                      card.querySelector(
+                          ".vscode-code-input"
+                      );
+
+                  hasAnswer =
+                      Boolean(
+                          editor &&
+                          editor.value.trim()
+                      );
+
+              }
+
+
+              const status =
+                  card.querySelector(
+                      ".question-status"
+                  );
+
+
+              if (hasAnswer) {
+
+                  answered++;
+
+                  card.classList.add(
+                      "question-answered"
+                  );
+
+                  if (status) {
+
+                      status.classList.remove(
+                          "unanswered"
+                      );
+
+                      status.classList.add(
+                          "answered"
+                      );
+
+                      status.innerHTML =
+                          '<i class="bi bi-check-circle-fill"></i> Đã trả lời';
+
+                  }
+
+              } else {
+
+                  card.classList.remove(
+                      "question-answered"
+                  );
+
+                  if (status) {
+
+                      status.classList.remove(
+                          "answered"
+                      );
+
+                      status.classList.add(
+                          "unanswered"
+                      );
+
+                      status.innerHTML =
+                          '<i class="bi bi-circle"></i> Chưa trả lời';
+
+                  }
+
+              }
+
+          });
+
+
+      const total =
+          document.querySelectorAll(
+              ".question-card"
+          ).length;
+
+
+      const percentage =
+          total > 0
+              ? Math.round(
+                  answered / total * 100
+                )
+              : 0;
+
+
+      document.getElementById(
+          "answered-count"
+      ).textContent = answered;
+
+
+      document.getElementById(
+          "progress-percent"
+      ).textContent =
+          percentage + "%";
+
+
+      document.getElementById(
+          "exam-progress-bar"
+      ).style.width =
+          percentage + "%";
+
+
+      document
+          .querySelectorAll(".question-nav-btn")
+          .forEach(function(button) {
+
+              const index =
+                  button.dataset.questionIndex;
+
+              const card =
+                  document.querySelector(
+                      `[data-question-index="${index}"]`
+                  );
+
+              if (
+                  card &&
+                  card.classList.contains(
+                      "question-answered"
+                  )
+              ) {
+
+                  button.classList.add(
+                      "answered"
+                  );
+
+              } else {
+
+                  button.classList.remove(
+                      "answered"
+                  );
+
+              }
+
+          });
+
+  }
+
+
+  examForm.addEventListener(
+      "input",
+      updateProgress
+  );
+  examForm.addEventListener(
+      "change",
+      updateProgress
+  );
+
+  /* =========================================================
+     MCQ
+     ========================================================= */
+
+  document
+      .querySelectorAll(
+          '.mcq-option input[type="radio"]'
+      )
+      .forEach(function(input) {
+
+          input.addEventListener(
+              "change",
+              function() {
+
+                  const group =
+                      input.closest(
+                          ".mcq-options"
+                      );
+
+                  group
+                      .querySelectorAll(
+                          ".mcq-option"
+                      )
+                      .forEach(
+                          option =>
+                              option.classList.remove(
+                                  "selected"
+                              )
+                      );
+
+                  input
+                      .closest(
+                          ".mcq-option"
+                      )
+                      .classList.add(
+                          "selected"
+                      );
+
+                  updateProgress();
+                  scheduleDraftSave();
+
+              }
+          );
+
+      });
+
+
+  /* =========================================================
+     DRAG
+     ========================================================= */
+
+  function initDragQuestions() {
+
+      document
+          .querySelectorAll(
+              ".drag-code-area"
+          )
+          .forEach(function(editor) {
+
+              const template =
+                  editor.dataset.template || "";
+
+              renderDragTemplate(
+                  editor,
+                  template
+              );
+
+          });
+
+
+      document
+          .querySelectorAll(
+              ".drag-token"
+          )
+          .forEach(
+              token =>
+                  setupDragToken(token)
+          );
+
+      document
+          .querySelectorAll(".drag-source-pool")
+          .forEach(pool => setupDragPool(pool));
+
+  }
+
+
+  function renderDragTemplate(
+      editor,
+      template
+  ) {
+
+      editor.innerHTML = "";
+
+      const fragment =
+          document.createDocumentFragment();
+
+      const regex =
+          /\[\[(\d+)\]\]/g;
+
+      let lastIndex = 0;
+
+      let match;
+
+
+      while (
+          (match = regex.exec(template))
+          !== null
+      ) {
+
+          const before =
+              template.slice(
+                  lastIndex,
+                  match.index
+              );
+
+          if (before) {
+
+              const text =
+                  document.createElement(
+                      "span"
+                  );
+
+              text.className =
+                  "code-text";
+
+              text.textContent =
+                  before;
+
+              fragment.appendChild(text);
+
+          }
+
+
+          const slot =
+              document.createElement(
+                  "span"
+              );
+
+          slot.className =
+              "drag-slot";
+
+          slot.dataset.slot =
+              match[1];
+
+          slot.dataset.question =
+              editor.dataset.question;
+
+          slot.innerHTML = `
+            <span class="drag-slot-number">
+              [[${match[1]}]]
+            </span>
+            <span class="drag-slot-placeholder">
+              thả code
+            </span>
+          `;
+
+          setupDropSlot(slot);
+
+          fragment.appendChild(slot);
+
+
+          lastIndex =
+              regex.lastIndex;
+
+      }
+
+
+      const after = template.slice(lastIndex);
+      if (after) {
+          const text = document.createElement("span");
+          text.className = "code-text";
+          text.textContent = after;
+          fragment.appendChild(text);
+      }
+
+      editor.appendChild(fragment);
+
+      updateDragAnswer(
+          editor.dataset.question
+      );
+
+  }
+
+
+  function setupDragToken(token) {
+
+      token.addEventListener(
+          "dragstart",
+          function(event) {
+
+              token.classList.add(
+                  "dragging"
+              );
+
+              event.dataTransfer.setData(
+                  "text/plain",
+                  token.id
+              );
+
+              event.dataTransfer.effectAllowed =
+                  "move";
+
+          }
+      );
+
+
+      token.addEventListener(
+          "dragend",
+          function() {
+
+              token.classList.remove(
+                  "dragging"
+              );
+
+              updateDragAnswer(
+                  token.dataset.question
+              );
+
+              updateProgress();
+
+              scheduleDraftSave();
+
+          }
+      );
+
+  }
+
+
+  function setupDragPool(pool) {
+      pool.addEventListener("dragover", function(event) {
+          event.preventDefault();
+          pool.classList.add("drag-over");
+      });
+
+      pool.addEventListener("dragleave", function(event) {
+          if (!pool.contains(event.relatedTarget)) {
+              pool.classList.remove("drag-over");
+          }
+      });
+
+      pool.addEventListener("drop", function(event) {
+          event.preventDefault();
+          pool.classList.remove("drag-over");
+          const tokenId = event.dataTransfer.getData("text/plain");
+          const token = document.getElementById(tokenId);
+          if (!token || token.dataset.question !== pool.dataset.question) return;
+
+          const originSlot = token.closest(".drag-slot");
+          pool.appendChild(token);
+          token.classList.remove("drag-token-in-slot");
+          if (originSlot) updateDragSlot(originSlot);
+          updateDragAnswer(pool.dataset.question);
+          updateProgress();
+          scheduleDraftSave();
+      });
+  }
+
+
+  function setupDropSlot(slot) {
+
+      slot.addEventListener(
+          "dragover",
+          function(event) {
+
+              event.preventDefault();
+
+              slot.classList.add(
+                  "drag-over"
+              );
+
+          }
+      );
+
+
+      slot.addEventListener(
+          "dragleave",
+          function() {
+
+              slot.classList.remove(
+                  "drag-over"
+              );
+
+          }
+      );
+
+
+      slot.addEventListener(
+          "drop",
+          function(event) {
+
+              event.preventDefault();
+
+              slot.classList.remove(
+                  "drag-over"
+              );
+
+
+              const tokenId =
+                  event.dataTransfer.getData(
+                      "text/plain"
+                  );
+
+              if (!tokenId) return;
+
+
+              const token = document.getElementById(tokenId);
+
+              if (!token || token.dataset.question !== slot.dataset.question) return;
+
+
+              const originSlot = token.closest(".drag-slot");
+              const existing =
+                  slot.querySelector(
+                      ".drag-token"
+                  );
+
+              if (originSlot === slot) return;
+
+              if (existing && existing !== token) {
+
+                  const pool = document.getElementById(`drag-pool-${slot.dataset.question}`);
+                  pool.appendChild(existing);
+                  existing.classList.remove("drag-token-in-slot");
+
+              }
+
+              if (originSlot) updateDragSlot(originSlot);
+
+              slot.innerHTML = "";
+
+              token.classList.add(
+                  "drag-token-in-slot"
+              );
+
+              slot.appendChild(token);
+
+              updateDragSlot(slot);
+
+              updateDragAnswer(
+                  slot.dataset.question
+              );
+
+              updateProgress();
+
+              scheduleDraftSave();
+
+          }
+      );
+
+  }
+
+
+  function updateDragSlot(slot) {
+
+      const token =
+          slot.querySelector(
+              ".drag-token"
+          );
+
+      if (token) {
+
+          slot.classList.add(
+              "is-filled"
+          );
+
+          slot
+              .querySelectorAll(
+                  ".drag-slot-number, .drag-slot-placeholder"
+              )
+              .forEach(
+                  element =>
+                      element.remove()
+              );
+
+      } else {
+
+          slot.classList.remove(
+              "is-filled"
+          );
+
+          slot.innerHTML = `
+            <span class="drag-slot-number">
+              [[${slot.dataset.slot}]]
+            </span>
+            <span class="drag-slot-placeholder">
+              thả code
+            </span>
+          `;
+
+      }
+
+  }
+
+
+  function updateDragAnswer(
+      questionIndex
+  ) {
+
+      const editor =
+          document.querySelector(
+              `.drag-code-area[data-question="${questionIndex}"]`
+          );
+
+      const input =
+          document.getElementById(
+              `drag-answer-${questionIndex}`
+          );
+
+      if (!editor || !input) return;
+
+
+      const slots = Array.from(
+          editor.querySelectorAll(".drag-slot")
+      );
+      const values = Array(slots.length).fill(null);
+
+      slots.forEach(function(slot) {
+          const slotIndex = Number(slot.dataset.slot) - 1;
+          const token = slot.querySelector(".drag-token");
+          if (slotIndex >= 0 && slotIndex < values.length) {
+              values[slotIndex] = token ? token.dataset.value : null;
+          }
+      });
+
+
+      input.value =
+          JSON.stringify(values);
+
+  }
+
+
+  /* =========================================================
+     SORT
+     ========================================================= */
+
+  function initSortQuestions() {
+
+      document
+          .querySelectorAll(
+              ".sort-code-item"
+          )
+          .forEach(
+              item =>
+                  setupSortItem(item)
+          );
+
+
+      document
+          .querySelectorAll(
+              ".sort-answer-zone"
+          )
+          .forEach(
+              zone =>
+                  setupSortZone(zone)
+          );
+
+
+      document
+          .querySelectorAll(
+              ".sort-source-zone"
+          )
+          .forEach(
+              zone =>
+                  setupSortZone(zone)
+          );
+
+  }
+
+
+  function setupSortItem(item) {
+
+      item.addEventListener(
+          "dragstart",
+          function(event) {
+
+              item.classList.add(
+                  "dragging"
+              );
+
+              event.dataTransfer.setData(
+                  "text/plain",
+                  item.id
+              );
+
+              event.dataTransfer.effectAllowed =
+                  "move";
+
+          }
+      );
+
+
+      item.addEventListener(
+          "dragend",
+          function() {
+
+              item.classList.remove(
+                  "dragging"
+              );
+
+              const questionIndex =
+                  item.dataset.question;
+
+              updateSortAnswer(
+                  questionIndex
+              );
+
+              updateProgress();
+              scheduleDraftSave();
+
+          }
+      );
+
+  }
+
+
+  function setupSortZone(zone) {
+
+      zone.addEventListener(
+          "dragover",
+          function(event) {
+
+              event.preventDefault();
+
+              zone.classList.add(
+                  "drag-over"
+              );
+
+          }
+      );
+
+
+      zone.addEventListener(
+          "dragleave",
+          function() {
+
+              zone.classList.remove(
+                  "drag-over"
+              );
+
+          }
+      );
+
+
+      zone.addEventListener(
+          "drop",
+          function(event) {
+
+              event.preventDefault();
+
+              zone.classList.remove(
+                  "drag-over"
+              );
+
+
+              const itemId =
+                  event.dataTransfer.getData(
+                      "text/plain"
+                  );
+
+              if (!itemId) return;
+
+
+              const source = document.getElementById(itemId);
+
+              if (
+                  !source ||
+                  !source.classList.contains("sort-code-item") ||
+                  source.dataset.question !== zone.dataset.question
+              ) return;
+
+
+              zone.querySelectorAll(".sort-empty").forEach(
+                  element => element.remove()
+              );
+
+              const target = event.target.closest(".sort-code-item");
+              if (target && target !== source && target.parentElement === zone) {
+                  const targetRect = target.getBoundingClientRect();
+                  const insertAfter = event.clientY > targetRect.top + targetRect.height / 2;
+                  zone.insertBefore(source, insertAfter ? target.nextSibling : target);
+              } else {
+                  zone.appendChild(source);
+              }
+
+              updateSortAnswer(
+                  zone.dataset.question
+              );
+
+
+              updateProgress();
+              scheduleDraftSave();
+
+          }
+      );
+
+  }
+
+
+  function updateSortAnswer(
+      questionIndex
+  ) {
+
+      const zone =
+          document.getElementById(
+              `sort-answer-${questionIndex}`
+          );
+
+      const input =
+          document.getElementById(
+              `sort-answer-input-${questionIndex}`
+          );
+
+      const count =
+          document.getElementById(
+              `sort-count-${questionIndex}`
+          );
+
+
+      if (!zone || !input) return;
+
+
+      const values =
+          Array.from(
+              zone.querySelectorAll(
+                  ".sort-code-item"
+              )
+          )
+          .map(
+              item =>
+                  item.dataset.value
+          );
+
+
+      input.value =
+          JSON.stringify(values);
+
+
+      if (count) {
+
+          count.textContent =
+              values.length;
+
+      }
+
+
+      const empty =
+          zone.querySelector(
+              ".sort-empty"
+          );
+
+
+      if (!values.length && !empty) {
+
+          zone.innerHTML = `
+            <div class="sort-empty">
+              <i class="bi bi-box-arrow-in-down"></i>
+              <span>Kéo dòng code vào đây</span>
+            </div>
+          `;
+
+      }
+
+  }
+
+
+  /* =========================================================
+     VSCODE EDITOR
+     ========================================================= */
+
+  function initCodeEditors() {
+
+      document
+          .querySelectorAll(
+              ".vscode-code-input"
+          )
+          .forEach(function(editor) {
+
+              const index =
+                  editor.dataset.question;
+
+              updateLineNumbers(
+                  editor
+              );
+
+              editor.addEventListener(
+                  "input",
+                  function() {
+
+                      updateLineNumbers(
+                          editor
+                      );
+
+                      updateCursorInfo(
+                          editor
+                      );
+
+                      updateProgress();
+
+                      scheduleDraftSave();
+
+                  }
+              );
+
+
+              editor.addEventListener(
+                  "scroll",
+                  function() {
+
+                      const gutter =
+                          document.getElementById(
+                              `line-numbers-${index}`
+                          );
+
+                      if (gutter) {
+
+                          gutter.scrollTop =
+                              editor.scrollTop;
+
+                      }
+
+                  }
+              );
+
+
+              editor.addEventListener(
+                  "click",
+                  function() {
+
+                      updateCursorInfo(
+                          editor
+                      );
+
+                  }
+              );
+
+
+              editor.addEventListener(
+                  "keyup",
+                  function() {
+
+                      updateCursorInfo(
+                          editor
+                      );
+
+                  }
+              );
+
+          });
+
+  }
+
+
+  function updateLineNumbers(
+      editor
+  ) {
+
+      const index =
+          editor.dataset.question;
+
+      const gutter =
+          document.getElementById(
+              `line-numbers-${index}`
+          );
+
+      if (!gutter) return;
+
+
+      const lineCount =
+          editor.value.split("\n").length;
+
+
+      gutter.innerHTML =
+          Array
+              .from(
+                  { length: lineCount },
+                  (_, i) => `<span>${i + 1}</span>`
+              )
+              .join("");
+
+  }
+
+
+  function updateCursorInfo(
+      editor
+  ) {
+
+      const index =
+          editor.dataset.question;
+
+      const position =
+          editor.selectionStart;
+
+      const before =
+          editor.value.substring(
+              0,
+              position
+          );
+
+      const line =
+          before.split("\n").length;
+
+      const lastBreak =
+          before.lastIndexOf("\n");
+
+      const column =
+          position -
+          lastBreak;
+
+
+      const lineElement =
+          document.getElementById(
+              `cursor-line-${index}`
+          );
+
+      const colElement =
+          document.getElementById(
+              `cursor-col-${index}`
+          );
+
+
+      if (lineElement) {
+
+          lineElement.textContent =
+              line;
+
+      }
+
+
+      if (colElement) {
+
+          colElement.textContent =
+              column;
+
+      }
+
+  }
+
+
+  /* =========================================================
+     RUN CODE
+     ========================================================= */
+
+  async function runStudentCode(
+      questionIndex
+  ) {
+
+      const editor =
+          document.getElementById(
+              `code-${questionIndex}`
+          );
+
+      const resultPanel =
+          document.getElementById(
+              `compiler-result-${questionIndex}`
+          );
+
+      const output =
+          document.getElementById(
+              `output-content-${questionIndex}`
+          );
+
+
+      if (!editor || !resultPanel || !output) {
+          return;
+      }
+
+
+      resultPanel.hidden = false;
+
+      output.textContent =
+          "Đang biên dịch và chạy test case...";
+
+
+      try {
+
+          const response =
+              await fetch(
+                  "{% url 'run_code' %}",
+                  {
+                      method: "POST",
+
+                      headers: {
+                          "Content-Type":
+                              "application/json",
+
+                          "X-CSRFToken":
+                              csrfToken
+                      },
+
+                      body:
+                          JSON.stringify({
+                              question_id:
+                                  questionIndex,
+
+                              student_exam_id:
+                                  studentExamId,
+
+                              code:
+                                  editor.value
+                          })
+                  }
+              );
+
+
+          const data =
+              await response.json();
+
+
+          if (!data.success) {
+
+              output.textContent =
+                  data.message ||
+                  "Không thể chạy chương trình.";
+
+              return;
+
+          }
+
+
+          let text =
+              `Score: ${data.score} / ${data.max_score}\n\n`;
+
+
+          if (data.compile_error) {
+
+              text +=
+                  "COMPILE ERROR\n\n";
+
+              text +=
+                  data.compile_error;
+
+          }
+
+          else if (data.runtime_error) {
+
+              text +=
+                  "RUNTIME ERROR\n\n";
+
+              text +=
+                  data.runtime_error;
+
+          }
+
+          else {
+
+              data.testcases.forEach(
+                  function(testcase, index) {
+
+                      text +=
+                          `Test ${index + 1}\n`;
+
+                      text +=
+                          `Input  : ${testcase.input}\n`;
+
+                      text +=
+                          `Expected: ${testcase.expected}\n`;
+
+                      text +=
+                          `Actual  : ${testcase.actual}\n`;
+
+                      text +=
+                          `Result  : ${
+                              testcase.passed
+                                  ? "PASSED"
+                                  : "FAILED"
+                          }\n\n`;
+
+                  }
+              );
+
+          }
+
+
+          output.textContent =
+              text;
+
+      }
+
+      catch (error) {
+
+          output.textContent =
+              "Không thể kết nối đến máy chủ.";
+
+      }
+
+  }
+
+
+  function closeCompilerResult(
+      questionIndex
+  ) {
+
+      const panel =
+          document.getElementById(
+              `compiler-result-${questionIndex}`
+          );
+
+      if (panel) {
+
+          panel.hidden = true;
+
+      }
+
+  }
+
+
+  /* =========================================================
+     NAVIGATION
+     ========================================================= */
+
+  const questionNavLinks =
+      Array.from(
+          document.querySelectorAll(
+              "[data-question-nav]"
+          )
+      );
+
+
+  const questionObserver =
+      new IntersectionObserver(
+          function(entries) {
+
+              const visible =
+                  entries
+                      .filter(
+                          entry =>
+                              entry.isIntersecting
+                      )
+                      .sort(
+                          (
+                              a,
+                              b
+                          ) =>
+                              b.intersectionRatio -
+                              a.intersectionRatio
+                      )[0];
+
+
+              if (!visible) return;
+
+
+              questionNavLinks
+                  .forEach(
+                      function(link) {
+
+                          const current =
+                              link.dataset.questionNav ===
+                              visible.target.id;
+
+
+                          link.classList.toggle(
+                              "current",
+                              current
+                          );
+
+                      }
+                  );
+
+          },
+          {
+              rootMargin:
+                  "-20% 0px -60% 0px",
+
+              threshold:
+                  [0, 0.25, 0.5]
+          }
+      );
+
+
+  document
+      .querySelectorAll(
+          ".question-card"
+      )
+      .forEach(
+          card =>
+              questionObserver.observe(card)
+      );
+
+
+  /* =========================================================
+     AUTOSAVE
+     ========================================================= */
+
+  const autosaveUrl =
+      "{% url 'autosave_exam' student_exam.id %}";
+
+  const autosaveStatus =
+      document.getElementById(
+          "autosave-status"
+      );
+
+  const autosaveStatusBottom =
+      document.getElementById(
+          "autosave-status-bottom"
+      );
+
+  let autosaveTimer = null;
+
+
+  function setAutosaveStatus(
+      text,
+      state = ""
+  ) {
+
+      if (autosaveStatus) {
+
+          autosaveStatus.textContent =
+              text;
+
+      }
+
+      if (autosaveStatusBottom) {
+
+          autosaveStatusBottom.innerHTML =
+              `<i class="bi bi-cloud-check"></i> ${text}`;
+
+      }
+
+      const indicator =
+          document.querySelector(
+              ".autosave-indicator"
+          );
+
+      if (indicator) {
+
+          indicator.classList.toggle(
+              "saving",
+              state === "saving"
+          );
+
+      }
+
+  }
+
+
+  async function saveExamDraft() {
+
+      if (
+          !examForm ||
+          examForm.dataset.saving === "true"
+      ) {
+          return;
+      }
+
+
+      handleBeforeSubmit();
+
+
+      examForm.dataset.saving =
+          "true";
+
+
+      setAutosaveStatus(
+          "Đang lưu...",
+          "saving"
+      );
+
+
+      try {
+
+          const response =
+              await fetch(
+                  autosaveUrl,
+                  {
+                      method: "POST",
+
+                      headers: {
+                          "X-CSRFToken":
+                              csrfToken
+                      },
+
+                      body:
+                          new FormData(
+                              examForm
+                          ),
+
+                      keepalive: true
+                  }
+              );
+
+
+          if (response.ok) {
+
+              setAutosaveStatus(
+                  "Đã lưu nháp"
+              );
+
+          }
+
+          else {
+
+              setAutosaveStatus(
+                  "Chưa đồng bộ được"
+              );
+
+          }
+
+      }
+
+      catch (error) {
+
+          setAutosaveStatus(
+              "Chưa đồng bộ được"
+          );
+
+      }
+
+      finally {
+
+          examForm.dataset.saving =
+              "false";
+
+      }
+
+  }
+
+
+  function scheduleDraftSave() {
+
+      setAutosaveStatus(
+          "Đang lưu...",
+          "saving"
+      );
+
+
+      clearTimeout(
+          autosaveTimer
+      );
+
+
+      autosaveTimer =
+          setTimeout(
+              saveExamDraft,
+              700
+          );
+
+  }
+
+
+  examForm.addEventListener(
+      "input",
+      scheduleDraftSave
+  );
+
+  examForm.addEventListener(
+      "change",
+      scheduleDraftSave
+  );
+
+  document.addEventListener(
+      "dragend",
+      scheduleDraftSave
+  );
+
+
+  setInterval(
+      saveExamDraft,
+      8000
+  );
+
+
+  /* =========================================================
+     BEFORE SUBMIT
+     ========================================================= */
+
+  function handleBeforeSubmit() {
+
+      document
+          .querySelectorAll(
+              ".drag-code-area"
+          )
+          .forEach(
+              editor =>
+                  updateDragAnswer(
+                      editor.dataset.question
+                  )
+          );
+
+
+      document
+          .querySelectorAll(
+              ".sort-answer-zone"
+          )
+          .forEach(
+              zone =>
+                  updateSortAnswer(
+                      zone.id.split("-").pop()
+                  )
+          );
+
+
+      return true;
+
+  }
+
+
+  /* =========================================================
+     PROCTORING
+     ========================================================= */
+
+  {% if proctoring_enabled %}
+
+  const proctorVideo =
+      document.getElementById(
+          "proctor-video"
+      );
+
+  const proctorStatus =
+      document.getElementById(
+          "proctor-status"
+      );
+
+  const proctorWarning =
+      document.getElementById(
+          "proctor-warning"
+      );
+
+  const startProctoring =
+      document.getElementById(
+          "start-proctoring"
+      );
+
+  let proctorStream = null;
+  let proctorInterval = null;
+
+
+  startProctoring.addEventListener(
+      "click",
+      async function() {
+
+          try {
+
+              proctorStream =
+                  await navigator
+                      .mediaDevices
+                      .getUserMedia({
+                          video: {
+                              width: {
+                                  ideal: 320
+                              },
+
+                              height: {
+                                  ideal: 240
+                              }
+                          },
+
+                          audio: false
+                      });
+
+
+              proctorVideo.srcObject =
+                  proctorStream;
+
+              await proctorVideo.play();
+
+
+              startProctoring.disabled =
+                  true;
+
+              proctorStatus.textContent =
+                  "Camera đang hoạt động.";
+
+
+              proctorInterval =
+                  setInterval(
+                      sendProctorFrame,
+                      5000
+                  );
+
+          }
+
+          catch (error) {
+
+              proctorStatus.textContent =
+                  "Không thể bật webcam.";
+
+          }
+
+      }
+  );
+
+
+  async function sendProctorFrame() {
+
+      if (!proctorVideo.videoWidth) {
+          return;
+      }
+
+
+      const canvas =
+          document.createElement(
+              "canvas"
+          );
+
+
+      canvas.width = 320;
+
+      canvas.height =
+          Math.round(
+              320 *
+              proctorVideo.videoHeight /
+              proctorVideo.videoWidth
+          );
+
+
+      canvas
+          .getContext("2d")
+          .drawImage(
+              proctorVideo,
+              0,
+              0,
+              canvas.width,
+              canvas.height
+          );
+
+
+      const frame =
+          await new Promise(
+              resolve =>
+                  canvas.toBlob(
+                      resolve,
+                      "image/jpeg",
+                      0.65
+                  )
+          );
+
+
+      if (!frame) return;
+
+
+      const payload =
+          new FormData();
+
+
+      payload.append(
+          "frame",
+          frame,
+          "proctor-frame.jpg"
+      );
+
+
+      try {
+
+          const response =
+              await fetch(
+                  "{% url 'proctor_exam_frame' student_exam.id %}",
+                  {
+                      method: "POST",
+
+                      headers: {
+                          "X-CSRFToken":
+                              csrfToken
+                      },
+
+                      body: payload
+                  }
+              );
+
+
+          const result =
+              await response.json();
+
+
+          if (result.warning_created) {
+
+              proctorWarning.hidden =
+                  false;
+
+              proctorWarning.textContent =
+                  `Cảnh báo ${result.warning_count}/3`;
+
+          }
+
+
+          if (result.terminated) {
+
+              clearInterval(
+                  proctorInterval
+              );
+
+              proctorStream
+                  .getTracks()
+                  .forEach(
+                      track =>
+                          track.stop()
+                  );
+
+
+              window.location.assign(
+                  result.redirect_url
+              );
+
+          }
+
+      }
+
+      catch (error) {
+
+          proctorStatus.textContent =
+              "Mất kết nối dịch vụ giám sát.";
+
+      }
+
+  }
+
+
+  window.addEventListener(
+      "pagehide",
+      function() {
+
+          clearInterval(
+              proctorInterval
+          );
+
+          proctorStream
+              ?.getTracks()
+              .forEach(
+                  track =>
+                      track.stop()
+              );
+
+      }
+  );
+
+  {% endif %}
+
+
+  /* =========================================================
+     INITIALIZE
+     ========================================================= */
+
+  document.addEventListener(
+      "DOMContentLoaded",
+      function() {
+
+          initDragQuestions();
+
+          initSortQuestions();
+
+          initCodeEditors();
+
+          updateProgress();
+
+          handleBeforeSubmit();
+
+      }
+  );
+</script>
+
+{% endblock %}

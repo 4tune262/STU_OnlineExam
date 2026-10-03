@@ -1,0 +1,929 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Import dữ liệu Excel{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    .import-container {
+        max-width: 1250px;
+        margin: 25px auto;
+        padding: 0 20px 40px;
+    }
+
+    /* =========================
+       HEADER
+       ========================= */
+
+    .import-header {
+        margin-bottom: 25px;
+    }
+
+    .import-header h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+    }
+
+    .import-header p {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+    }
+
+    /* =========================
+       GENERAL NOTE
+       ========================= */
+
+    .general-note {
+        background: #f0f7fb;
+        border: 1px solid #c9e0ed;
+        border-left: 5px solid #417690;
+        border-radius: 7px;
+        padding: 18px 20px;
+        margin-bottom: 25px;
+    }
+
+    .general-note h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
+    }
+
+    .general-note ul {
+        margin: 0;
+        padding-left: 22px;
+    }
+
+    .general-note li {
+        margin-bottom: 5px;
+        color: #555;
+    }
+
+    /* =========================
+       IMPORT GRID
+       ========================= */
+
+    .import-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+
+    .import-card {
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .card-header {
+        padding: 20px 22px;
+        background: #f7f9fa;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .card-header h2 {
+        margin: 0 0 7px;
+        font-size: 21px;
+    }
+
+    .card-header p {
+        margin: 0;
+        color: #666;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .card-body {
+        padding: 22px;
+    }
+
+    /* =========================
+       FORM
+       ========================= */
+
+    .form-row {
+        margin-bottom: 20px;
+    }
+
+    .form-row label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .required {
+        color: #ba2121;
+    }
+
+    .form-row select {
+        width: 100%;
+        min-height: 44px;
+        padding: 9px 38px 9px 12px;
+        border: 1px solid #aaa;
+        border-radius: 6px;
+        background-color: #fff;
+        color: #222;
+        font-size: 14px;
+        line-height: 1.4;
+        white-space: normal;
+        overflow: visible;
+    }
+
+    .form-row select:focus {
+        border-color: #417690;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.15);
+    }
+
+    .form-row input[type="file"] {
+        width: 100%;
+        padding: 9px;
+        border: 1px solid #aaa;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 13px;
+    }
+
+    .file-note {
+        margin-top: 7px;
+        color: #777;
+        font-size: 12px;
+    }
+
+    /* =========================
+       EXCEL FORMAT
+       ========================= */
+
+    .excel-section {
+        margin-top: 25px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e5e5;
+    }
+
+    .excel-section h3 {
+        margin: 0 0 6px;
+        font-size: 16px;
+    }
+
+    .excel-section > p {
+        margin: 0 0 14px;
+        color: #666;
+        font-size: 13px;
+    }
+
+    .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+    }
+
+    .excel-table {
+        width: 100%;
+        min-width: 620px;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .excel-table th,
+    .excel-table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e5e5e5;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .excel-table th {
+        background: #f5f5f5;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .excel-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .excel-table code {
+        padding: 2px 5px;
+        background: #f1f1f1;
+        border-radius: 3px;
+        color: #333;
+        font-size: 11px;
+    }
+
+    .required-column {
+        color: #ba2121;
+        font-weight: 600;
+    }
+
+    /* =========================
+       EXAMPLE
+       ========================= */
+
+    .example-box {
+        margin-top: 15px;
+        padding: 12px;
+        background: #fafafa;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+    }
+
+    .example-box-title {
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .example-table {
+        width: 100%;
+        min-width: 700px;
+        border-collapse: collapse;
+        font-size: 11px;
+    }
+
+    .example-table th,
+    .example-table td {
+        padding: 7px;
+        border: 1px solid #ddd;
+        white-space: nowrap;
+    }
+
+    .example-table th {
+        background: #eee;
+    }
+
+    /* =========================
+       SUBMIT
+       ========================= */
+
+    .submit-row {
+        margin-top: 22px;
+    }
+
+    .submit-row input[type="submit"] {
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 6px;
+        background: #417690;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .submit-row input[type="submit"]:hover {
+        background: #2f5d73;
+    }
+
+    /* =========================
+       BOTTOM NOTE
+       ========================= */
+
+    .bottom-note {
+        margin-top: 25px;
+        padding: 16px 18px;
+        background: #fffbea;
+        border: 1px solid #eadb9b;
+        border-radius: 7px;
+        color: #665c28;
+        font-size: 13px;
+    }
+
+    .bottom-note strong {
+        color: #4f461d;
+    }
+
+    /* =========================
+       RESPONSIVE
+       ========================= */
+
+    @media (max-width: 1000px) {
+        .import-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 600px) {
+        .import-container {
+            padding: 0 10px 30px;
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        .card-header {
+            padding: 16px;
+        }
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="import-container">
+
+    <!-- =========================
+         PAGE HEADER
+         ========================= -->
+
+    <div class="import-header">
+        <h1>Import dữ liệu từ Excel</h1>
+
+        <p>
+            Import danh sách sinh viên và giảng viên vào hệ thống
+            theo từng lớp học phần.
+        </p>
+    </div>
+
+
+    <!-- =========================
+         GENERAL GUIDE
+         ========================= -->
+
+    <div class="general-note">
+
+        <h3>Hướng dẫn chung</h3>
+
+        <ul>
+            <li>
+                Chỉ chấp nhận file Excel có định dạng
+                <strong>.xlsx</strong>.
+            </li>
+
+            <li>
+                File Excel phải có đúng các cột bắt buộc
+                được mô tả bên dưới.
+            </li>
+
+            <li>
+                Không cần thêm cột username hoặc password.
+                Hệ thống sẽ tự tạo tài khoản.
+            </li>
+
+            <li>
+                Tài khoản sinh viên sử dụng
+                <strong>MSSV</strong> làm username.
+            </li>
+
+            <li>
+                Tài khoản giảng viên sử dụng
+                <strong>Mã GV</strong> làm username.
+            </li>
+
+            <li>
+                Mật khẩu ban đầu của tài khoản mới sẽ giống username.
+            </li>
+        </ul>
+
+    </div>
+
+
+    <!-- =========================
+         IMPORT CARDS
+         ========================= -->
+
+    <div class="import-grid">
+
+
+        <!-- ==================================================
+             SINH VIÊN
+             ================================================== -->
+
+        <div class="import-card">
+
+            <div class="card-header">
+
+                <h2>Import sinh viên</h2>
+
+                <p>
+                    Import danh sách sinh viên thuộc một lớp học phần.
+                    Sinh viên sẽ được thêm vào Enrollment của lớp đã chọn.
+                </p>
+
+            </div>
+
+
+            <div class="card-body">
+
+
+                <!-- FORM -->
+
+                <form method="post"
+                      enctype="multipart/form-data">
+
+                    {% csrf_token %}
+
+                    <input type="hidden"
+                           name="import_type"
+                           value="students">
+
+
+                    <!-- COURSE OFFERING -->
+
+                    <div class="form-row">
+
+                        <label for="student-course-offering">
+                            Lớp học phần
+                            <span class="required">*</span>
+                        </label>
+
+                        <select
+                            id="student-course-offering"
+                            name="course_offering"
+                            required
+                        >
+
+                            <option value="">
+                                -- Chọn lớp học phần --
+                            </option>
+
+                            {% for offering in offerings %}
+
+                                <option value="{{ offering.pk }}">
+                                    {{ offering.course.code }}
+                                    -
+                                    {{ offering.course.name }}
+                                    | Nhóm {{ offering.group_code }}
+                                    | Ca {{ offering.session_number }}
+                                    | Phòng {{ offering.classroom }}
+                                </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- FILE -->
+
+                    <div class="form-row">
+
+                        <label for="student-excel-file">
+                            File Excel
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            id="student-excel-file"
+                            type="file"
+                            name="excel_file"
+                            accept=".xlsx"
+                            required
+                        >
+
+                        <div class="file-note">
+                            Chỉ chấp nhận file <strong>.xlsx</strong>
+                        </div>
+
+                    </div>
+
+
+                    <!-- EXCEL FORMAT -->
+
+                    <div class="excel-section">
+
+                        <h3>Cấu trúc file Excel sinh viên</h3>
+
+                        <p>
+                            File phải có các cột sau:
+                        </p>
+
+
+                        <div class="table-wrapper">
+
+                            <table class="excel-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Cột Excel</th>
+                                        <th>Bắt buộc</th>
+                                        <th>Ý nghĩa</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    <tr>
+                                        <td><code>MSSV</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Mã số sinh viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>HoTen</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Họ và tên sinh viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Email</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Email sinh viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Khoa</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Khoa</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Nganh</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Ngành học</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Lop</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Lớp hành chính</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>NamHoc</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Năm học</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>NgaySinh</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Ngày sinh</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>SoDienThoai</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Số điện thoại</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>DiaChi</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Địa chỉ</td>
+                                    </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+
+                        <!-- EXAMPLE -->
+
+                        <div class="example-box">
+
+                            <div class="example-box-title">
+                                Ví dụ dữ liệu:
+                            </div>
+
+                            <div class="table-wrapper">
+
+                                <table class="example-table">
+
+                                    <thead>
+                                        <tr>
+                                            <th>MSSV</th>
+                                            <th>HoTen</th>
+                                            <th>Email</th>
+                                            <th>Khoa</th>
+                                            <th>Nganh</th>
+                                            <th>Lop</th>
+                                            <th>NamHoc</th>
+                                            <th>NgaySinh</th>
+                                            <th>SoDienThoai</th>
+                                            <th>DiaChi</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+
+                                        <tr>
+                                            <td>DH52200001</td>
+                                            <td>Nguyen Van An</td>
+                                            <td>an@gmail.com</td>
+                                            <td>CNTT</td>
+                                            <td>Cong nghe thong tin</td>
+                                            <td>D23_TH01</td>
+                                            <td>3</td>
+                                            <td>15/05/2005</td>
+                                            <td>0901234567</td>
+                                            <td>TP.HCM</td>
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- SUBMIT -->
+
+                    <div class="submit-row">
+
+                        <input
+                            type="submit"
+                            value="Import sinh viên"
+                        >
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+
+        <!-- ==================================================
+             GIẢNG VIÊN
+             ================================================== -->
+
+        <div class="import-card">
+
+            <div class="card-header">
+
+                <h2>Import giảng viên</h2>
+
+                <p>
+                    Import danh sách giảng viên và tự động phân công
+                    giảng viên vào lớp học phần được chọn.
+                </p>
+
+            </div>
+
+
+            <div class="card-body">
+
+
+                <!-- FORM -->
+
+                <form method="post"
+                      enctype="multipart/form-data">
+
+                    {% csrf_token %}
+
+                    <input type="hidden"
+                           name="import_type"
+                           value="lecturers">
+
+
+                    <!-- COURSE OFFERING -->
+
+                    <div class="form-row">
+
+                        <label for="lecturer-course-offering">
+                            Lớp học phần
+                            <span class="required">*</span>
+                        </label>
+
+                        <select
+                            id="lecturer-course-offering"
+                            name="course_offering"
+                            required
+                        >
+
+                            <option value="">
+                                -- Chọn lớp học phần --
+                            </option>
+
+                            {% for offering in offerings %}
+
+                                <option value="{{ offering.pk }}">
+                                    {{ offering.course.code }}
+                                    -
+                                    {{ offering.course.name }}
+                                    | Nhóm {{ offering.group_code }}
+                                    | Ca {{ offering.session_number }}
+                                    | Phòng {{ offering.classroom }}
+                                </option>
+
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- FILE -->
+
+                    <div class="form-row">
+
+                        <label for="lecturer-excel-file">
+                            File Excel
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            id="lecturer-excel-file"
+                            type="file"
+                            name="excel_file"
+                            accept=".xlsx"
+                            required
+                        >
+
+                        <div class="file-note">
+                            Chỉ chấp nhận file <strong>.xlsx</strong>
+                        </div>
+
+                    </div>
+
+
+                    <!-- EXCEL FORMAT -->
+
+                    <div class="excel-section">
+
+                        <h3>Cấu trúc file Excel giảng viên</h3>
+
+                        <p>
+                            File phải có các cột sau:
+                        </p>
+
+
+                        <div class="table-wrapper">
+
+                            <table class="excel-table">
+
+                                <thead>
+                                    <tr>
+                                        <th>Cột Excel</th>
+                                        <th>Bắt buộc</th>
+                                        <th>Ý nghĩa</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    <tr>
+                                        <td><code>MaGV</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Mã giảng viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>HoTen</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Họ và tên giảng viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Email</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Email giảng viên</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Khoa</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Khoa</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>Nganh</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Ngành</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>SoDienThoai</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Số điện thoại</td>
+                                    </tr>
+
+                                    <tr>
+                                        <td><code>DiaChi</code></td>
+                                        <td class="required-column">Có</td>
+                                        <td>Địa chỉ</td>
+                                    </tr>
+
+                                </tbody>
+
+                            </table>
+
+                        </div>
+
+
+                        <!-- EXAMPLE -->
+
+                        <div class="example-box">
+
+                            <div class="example-box-title">
+                                Ví dụ dữ liệu:
+                            </div>
+
+                            <div class="table-wrapper">
+
+                                <table class="example-table">
+
+                                    <thead>
+                                        <tr>
+                                            <th>MaGV</th>
+                                            <th>HoTen</th>
+                                            <th>Email</th>
+                                            <th>Khoa</th>
+                                            <th>Nganh</th>
+                                            <th>SoDienThoai</th>
+                                            <th>DiaChi</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody>
+
+                                        <tr>
+                                            <td>GV001</td>
+                                            <td>Nguyen Van B</td>
+                                            <td>gv001@stu.edu.vn</td>
+                                            <td>CNTT</td>
+                                            <td>Cong nghe thong tin</td>
+                                            <td>0909876543</td>
+                                            <td>TP.HCM</td>
+                                        </tr>
+
+                                    </tbody>
+
+                                </table>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- SUBMIT -->
+
+                    <div class="submit-row">
+
+                        <input
+                            type="submit"
+                            value="Import giảng viên"
+                        >
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         FINAL NOTE
+         ========================= -->
+
+    <div class="bottom-note">
+
+        <strong>Lưu ý về tài khoản:</strong>
+
+        <ul>
+            <li>
+                Tài khoản mới của sinh viên:
+                <strong>username = MSSV</strong>,
+                mật khẩu ban đầu = MSSV.
+            </li>
+
+            <li>
+                Tài khoản mới của giảng viên:
+                <strong>username = MaGV</strong>,
+                mật khẩu ban đầu = MaGV.
+            </li>
+
+            <li>
+                Nếu tài khoản đã tồn tại, hệ thống sẽ sử dụng
+                tài khoản hiện có và không tự động thay đổi mật khẩu.
+            </li>
+
+            <li>
+                Không được dùng một tài khoản sinh viên đã tồn tại
+                để import thành giảng viên và ngược lại.
+            </li>
+
+        </ul>
+
+    </div>
+
+</div>
+
+{% endblock %}

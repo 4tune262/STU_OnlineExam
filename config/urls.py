@@ -82,11 +82,20 @@ urlpatterns = [
     path('exams/', views.exam_list_view, name='exam_list'),
     path('exam/<int:exam_id>/', views.take_exam_view, name='take_exam'),
     path('exams/submit/<int:student_exam_id>/', views.submit_exam, name='submit_exam'),
+    path('exams/autosave/<int:student_exam_id>/', views.autosave_exam, name='autosave_exam'),
+    path('api/proctor/frame/<int:student_exam_id>/', views.proctor_exam_frame, name='proctor_exam_frame'),
+    path('api/cv/presence/', views.report_computer_presence, name='report_computer_presence'),
     path('exams/result/<int:student_exam_id>/', views.exam_result_view, name='exam_result'),
     path('exams/results/', views.exam_result_list_view, name='exam_result_list'),
 
     # Giao diện quản lý của Giảng viên
     path('teacher/exams/<int:exam_id>/submissions/', views.teacher_exam_submissions, name='teacher_exam_submissions'),
+    path('teacher/exams/<int:exam_id>/report/', views.lecturer_exam_report, name='teacher_exam_report'),
+    path('teacher/exams/<int:exam_id>/report.pdf', views.teacher_exam_pdf, name='teacher_exam_pdf'),
+    path('teacher/submissions/<int:student_exam_id>/', views.teacher_view_student_detail, name='teacher_view_student_detail'),
+    path('teacher/results/', views.teacher_results_view, name='teacher_results'),
+    path('teacher/computers/<int:computer_id>/reopen/', views.reopen_exam_computer, name='reopen_exam_computer'),
+    path('teacher/proctor-events/<int:event_id>/review/', views.review_proctor_event, name='review_proctor_event'),
 
     # Công cụ chạy thử code
     path("api/run/", views.run_code, name="run_code"),

@@ -1,49 +1,156 @@
-{% extends "base.html" %}
-{% block body_block %}
+{% extends "base.html" %} {% block body_block %}
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Báo cáo kết quả bài thi: {{ exam.title }}</h2>
-        <button onclick="window.print()" class="btn btn-primary">
-            <i class="bi bi-file-earmark-pdf"></i> In / Tải file PDF
-        </button>
-    </div>
-    <p class="fw-bold">Tổng số sinh viên đã hoàn thành: <span class="text-success">{{ total_students }}</span></p>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Báo cáo kết quả bài thi: {{ exam.title }}</h2>
+    <a href="{% url 'teacher_exam_pdf' exam.id %}" class="btn btn-primary">
+      <i class="bi bi-file-earmark-pdf"></i> Tải PDF
+    </a>
+  </div>
+  <p class="fw-bold">
+    Sĩ số: <span>{{ total_students }}</span> · Đã nộp:
+    <span class="text-success">{{ submitted_count }}</span>
+  </p>
 
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>STT</th>
-                <th>Mã sinh viên</th>
-                <th>Họ tên</th>
-                <th>Khoa</th>
-                <th>Điểm số</th>
-                <th>Thời gian nộp</th>
-            </tr>
+  <table class="table table-bordered table-striped">
+    <thead class="table-dark">
+      <tr>
+        <th>STT</th>
+        <th>Mã sinh viên</th>
+        <th>Họ tên</th>
+        <th>Máy</th>
+        <th>Camera</th>
+        <th>Lớp hành chính</th>
+        <th>Khoa</th>
+        <th>Điểm số</th>
+        <th>Trạng thái</th>
+        <th>Thời gian nộp</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in roster %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ row.profile.student_id|default:"N/A" }}</td>
+        <td>
+          {{ row.profile.user.get_full_name|default:row.profile.user.username }}
+        </td>
+        <td>{{ row.computer_label }}</td>
+        <td>{{ row.camera_status }}</td>
+        <td>{{ row.profile.class_name|default:"N/A" }}</td>
+        <td>{{ row.profile.get_faculty_display|default:"N/A" }}</td>
+        <td class="fw-bold text-primary">{{ row.score_label }}</td>
+        <td>{{ row.status }}</td>
+        <td>{{ row.attempt.finished_at|date:"d/m/Y H:i:s"|default:"-" }}</td>
+        <td>
+          {% if row.status == "Vắng" and row.computer %}
+          <form
+            method="post"
+            action="{% url 'reopen_exam_computer' row.computer.id %}"
+          >
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-warning">
+              Xem xét / mở lại
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="11" class="text-center text-muted">
+          Lớp chưa có sinh viên ghi danh.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <section class="mt-5">
+    <div class="d-flex justify-content-between align-items-end mb-3">
+      <div>
+        <p class="eyebrow mb-1">GIÁM SÁT</p>
+        <h3 class="h5 mb-0">Sự kiện cần xem xét</h3>
+      </div>
+      <span class="text-muted small">Chỉ lưu frame tại thời điểm cảnh báo</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Thời điểm</th>
+            <th>Sinh viên</th>
+            <th>Máy</th>
+            <th>Sự kiện</th>
+            <th>Confidence</th>
+            <th>Thời lượng</th>
+            <th>Bằng chứng</th>
+            <th>Trạng thái</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
-            {% for sub in submissions %}
-            <tr>
-                <td>{{ forloop.counter }}</td>
-                <td>{{ sub.student.userprofile.student_id|default:"N/A" }}</td>
-                <td>{{ sub.student.username }}</td>
-                <td>{{ sub.student.userprofile.get_faculty_display|default:"N/A" }}</td>
-                <td class="fw-bold text-primary">{{ sub.score }}</td>
-                <td>{{ sub.submitted_at|default:"Đã nộp" }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="6" class="text-center text-muted">Chưa có sinh viên nào nộp bài.</td>
-            </tr>
-            {% endfor %}
+          {% for event in proctor_events %}
+          <tr>
+            <td>{{ event.created_at|date:"d/m/Y H:i:s" }}</td>
+            <td>
+              {{
+              event.student_exam.student.get_full_name|default:event.student_exam.student.username
+              }}
+            </td>
+            <td>
+              {% if event.exam_computer %}PC{{
+              event.exam_computer.computer_number|stringformat:"02d" }}{% else
+              %}-{% endif %}
+            </td>
+            <td>{{ event.get_event_type_display }}</td>
+            <td>
+              {% if event.confidence is not None %}{{
+              event.confidence|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td>{{ event.duration_seconds }} giây</td>
+            <td>
+              {% if event.evidence_image %}<a
+                href="{{ event.evidence_image.url }}"
+                target="_blank"
+                rel="noopener"
+                >Xem frame</a
+              >{% else %}-{% endif %}
+            </td>
+            <td>
+              {% if event.reviewed_at %}Đã xem{% else %}Chờ xem{% endif %}
+            </td>
+            <td>
+              {% if not event.reviewed_at %}
+              <form
+                method="post"
+                action="{% url 'review_proctor_event' event.id %}"
+              >
+                {% csrf_token %}
+                <input
+                  type="text"
+                  name="review_note"
+                  class="form-control form-control-sm mb-1"
+                  maxlength="2000"
+                  placeholder="Ghi chú xem xét"
+                />
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                  Đánh dấu đã xem
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="9" class="text-muted py-3">
+              Chưa có sự kiện vi phạm được ghi nhận.
+            </td>
+          </tr>
+          {% endfor %}
         </tbody>
-    </table>
+      </table>
+    </div>
+  </section>
 </div>
-<style>
-    @media print {
-        body * { visibility: hidden; }
-        .container, .container * { visibility: visible; }
-        .container { position: absolute; left: 0; top: 0; width: 100%; }
-        button { display: none !important; }
-    }
-</style>
 {% endblock %}
