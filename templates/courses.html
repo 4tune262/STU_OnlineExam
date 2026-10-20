@@ -115,6 +115,28 @@
               </span>
 
 
+              <!-- =================================================
+                   NUT THEO VAI TRO
+                   SINH VIEN  -> VAO THI
+                   GIANG VIEN -> VAO GIAM SAT
+                   ================================================= -->
+
+              {% if user.userprofile.role == "lecturer" %}
+
+              <!-- GIANG VIEN -->
+              <a
+                href="{% url 'teacher_monitor' %}"
+                class="btn btn-sm btn-primary"
+              >
+
+                <i class="bi bi-camera-video"></i>
+                Vào giám sát
+
+              </a>
+
+              {% else %}
+
+              <!-- SINH VIEN -->
               <a
                 href="{% url 'take_exam' exam.id %}"
                 class="btn btn-sm btn-success"
@@ -124,6 +146,8 @@
                 Vào thi
 
               </a>
+
+              {% endif %}
 
             </li>
 

@@ -72,13 +72,14 @@ urlpatterns = [
     # URL cho chức năng quét QR và tài khoản
     path("login/", views.qr_login_page, name="qr_login_page"),
     path("api/verify-qr/", views.verify_qr_login, name="verify_qr_login"),
+    path("api/verify-face/",views.verify_face_login,name="verify_face_login",),
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
     path('profile/', views.profile_view, name='profile'),
-
+    path("api/register-face/",views.register_face,name="register_face",),
     # Khóa học
     path('courses/', views.course_list_view, name='course_list'),
 
-    # Bài thi & Chấm điểm (Khớp đúng tên hàm trong views.py)
+    # Bài thi và Chấm điểm (Khớp đúng tên hàm trong views.py)
     path('exams/', views.exam_list_view, name='exam_list'),
     path('exam/<int:exam_id>/', views.take_exam_view, name='take_exam'),
     path('exams/submit/<int:student_exam_id>/', views.submit_exam, name='submit_exam'),
@@ -96,7 +97,16 @@ urlpatterns = [
     path('teacher/results/', views.teacher_results_view, name='teacher_results'),
     path('teacher/computers/<int:computer_id>/reopen/', views.reopen_exam_computer, name='reopen_exam_computer'),
     path('teacher/proctor-events/<int:event_id>/review/', views.review_proctor_event, name='review_proctor_event'),
+    path('teacher/student-exams/<int:student_exam_id>/allow/',views.teacher_allow_student_exam,name='teacher_allow_student_exam',),
+    path('teacher/student-exams/<int:student_exam_id>/terminate/',views.teacher_terminate_student_exam,name='teacher_terminate_student_exam',),
+    path('exams/status/<int:student_exam_id>/',views.student_exam_status,name='student_exam_status',),
+    path('exams/proctor/violation/<int:student_exam_id>/',views.report_proctor_violation, name='report_proctor_violation',),
 
+    path("exams/screen-share/<int:student_exam_id>/start/",views.start_screen_sharing,name="start_screen_sharing",),
+    path("exams/screen-share/<int:student_exam_id>/stop/",views.stop_screen_sharing,name="stop_screen_sharing",),
+
+    path("teacher/monitor/",views.teacher_monitor_view,name="teacher_monitor",),
+    path("teacher/monitor/data/",views.teacher_monitor_data,name="teacher_monitor_data",),
     # Công cụ chạy thử code
     path("api/run/", views.run_code, name="run_code"),
     path("compiler/", views.compiler_test, name="compiler_test"),

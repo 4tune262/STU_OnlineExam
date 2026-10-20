@@ -1131,6 +1131,69 @@ class StudentExam(models.Model):
 
     gesture_warned = models.BooleanField(default=False)
 
+    # =====================================================
+    # STEP 13 - SCREEN SHARING
+    # =====================================================
+
+    is_screen_sharing = models.BooleanField(
+        default=False,
+        verbose_name="Đang chia sẻ màn hình",
+    )
+
+    screen_share_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời điểm bắt đầu chia sẻ màn hình",
+    )
+
+    screen_share_stopped_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời điểm dừng chia sẻ màn hình",
+    )
+
+    # ==================================================
+    # PROCTORING - TRẠNG THÁI KHÓA BÀI
+    # ==================================================
+
+    is_locked = models.BooleanField(
+        default=False,
+        verbose_name="Đang bị khóa chờ giảng viên",
+        help_text="Bài thi đang tạm dừng và chờ giảng viên xử lý.",
+    )
+
+    lock_reason = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name="Lý do khóa",
+    )
+
+    locked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời gian khóa",
+    )
+
+    locked_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="locked_student_exams",
+        verbose_name="Giảng viên xử lý khóa",
+    )
+
+    unlock_count = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Số lần được mở khóa",
+    )
+
+    last_violation_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời gian vi phạm gần nhất",
+    )
     def save(self, *args, **kwargs):
         if not self.exam_code and self.exam:
             paper_codes = self.exam.paper_codes or []
@@ -1221,6 +1284,9 @@ class ProctorEvent(models.Model):
         ("looking_left", "Quay mặt sang trái"),
         ("looking_right", "Quay mặt sang phải"),
         ("looking_down", "Cúi mặt"),
+        ("tab_switch", "Rời tab thi"),
+        ("screen_share_started", "Bắt đầu chia sẻ màn hình"),
+        ("screen_share_stopped", "Dừng chia sẻ màn hình"),
     )
 
     student_exam = models.ForeignKey(
@@ -1255,4 +1321,70 @@ class ProctorEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} - {self.student_exam}"
+
+
+
+
+# ==========================================
+# FACE PROFILE - HỒ SƠ KHUÔN MẶT
+# ==========================================
+
+class FaceProfile(models.Model):
+    """
+    Lưu vector đặc trưng khuôn mặt gắn với một UserProfile.
+
+    Mỗi tài khoản chỉ có tối đa một hồ sơ khuôn mặt.
+    Không lưu ảnh khuôn mặt gốc trong model này.
+    """
+
+    user_profile = models.OneToOneField(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="face_profile",
+        verbose_name="Tài khoản",
+    )
+
+    embedding = models.JSONField(
+        verbose_name="Vector đặc trưng khuôn mặt",
+        help_text="Vector đặc trưng do DeepFace tạo ra.",
+    )
+
+    model_name = models.CharField(
+        max_length=50,
+        default="Facenet512",
+        verbose_name="Mô hình nhận diện",
+    )
+
+    detector_backend = models.CharField(
+        max_length=50,
+        default="opencv",
+        verbose_name="Bộ phát hiện khuôn mặt",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Đang sử dụng",
+    )
+
+    consented_at = models.DateTimeField(
+        verbose_name="Thời điểm đồng ý đăng ký khuôn mặt",
+    )
+
+    registered_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Ngày đăng ký",
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Cập nhật lần cuối",
+    )
+
+    class Meta:
+        verbose_name = "Hồ sơ khuôn mặt"
+        verbose_name_plural = "Hồ sơ khuôn mặt"
+
+    def __str__(self):
+        return f"Khuôn mặt - {self.user_profile.user.username}"
+
 

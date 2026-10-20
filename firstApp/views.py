@@ -1,12 +1,17 @@
 import json
+import base64
+import math
 import random
 import re
 import hmac
-
+from collections import defaultdict
+import logging
+logger = logging.getLogger(__name__)
+import uuid
 from uuid import uuid4
 from io import BytesIO
 from datetime import timedelta
-
+from PIL import Image
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.contrib import messages
@@ -15,14 +20,15 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.http import Http404, HttpResponse, JsonResponse, QueryDict
+from django.http import Http404, HttpResponse, JsonResponse, QueryDict, HttpResponseForbidden
 from django.contrib.auth import login
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.views.decorators.http import require_POST
-
+from django.views.decorators.http import require_POST, require_GET
+from django_ratelimit.decorators import ratelimit
 from .models import (
     UserProfile,
+    FaceProfile,
     Course,
     CourseOffering,
     Exam,
@@ -196,15 +202,29 @@ def index(request):
 
             exam.dashboard_action_disabled = not is_open
 
-        elif profile and exam.offering_id:
+        # elif profile and exam.offering_id:
+        #
+        #     exam.dashboard_action_url = reverse(
+        #         "teacher_exam_report",
+        #         args=(exam.pk,),
+        #     )
+        #
+        #     exam.dashboard_action_label = "Xem kết quả lớp"
+        #     exam.dashboard_action_icon = "bi bi-clipboard-data"
+        #     exam.dashboard_action_disabled = False
+
+        elif profile and profile.role == "lecturer" and exam.offering_id:
 
             exam.dashboard_action_url = reverse(
-                "teacher_exam_report",
-                args=(exam.pk,),
+                "teacher_monitor"
             )
 
-            exam.dashboard_action_label = "Xem kết quả lớp"
-            exam.dashboard_action_icon = "bi bi-clipboard-data"
+            exam.dashboard_action_label = "Vào giám sát"
+
+            exam.dashboard_action_icon = (
+                "bi bi-camera-video"
+            )
+
             exam.dashboard_action_disabled = False
 
         else:
@@ -262,26 +282,63 @@ def verify_qr_login(request):
 
         try:
 
-            data = json.loads(request.body)
+            # data = json.loads(request.body)
+            #
+            # qr_token = data.get("qr_token")
+            #
+            # profile = (
+            #     UserProfile.objects
+            #     .filter(
+            #         qr_token=qr_token
+            #     )
+            #     .select_related("user")
+            #     .first()
+            # )
+            #
+            # if profile and profile.user.is_active:
+            #
+            #     login(
+            #         request,
+            #         profile.user,
+            #     )
+            #
+            #     return JsonResponse({
+            #         "status": "success",
+            #         "message": "Đăng nhập thành công!",
+            #         "redirect_url": "/",
+            #     })
+            #
+            # return JsonResponse({
+            #     "status": "error",
+            #     "message": (
+            #         "Mã QR không hợp lệ "
+            #         "hoặc tài khoản đã bị vô hiệu hóa."
+            #     ),
+            # })
 
-            qr_token = data.get("qr_token")
+            data = json.loads(request.body)
+            qr_token_raw = data.get("qr_token")
+
+            try:
+                qr_token = uuid.UUID(str(qr_token_raw))
+            except (ValueError, TypeError, AttributeError):
+                return JsonResponse({
+                    "status": "error",
+                    "message": (
+                        "Mã QR không hợp lệ "
+                        "hoặc tài khoản đã bị vô hiệu hóa."
+                    ),
+                })
 
             profile = (
                 UserProfile.objects
-                .filter(
-                    qr_token=qr_token
-                )
+                .filter(qr_token=qr_token)
                 .select_related("user")
                 .first()
             )
 
             if profile and profile.user.is_active:
-
-                login(
-                    request,
-                    profile.user,
-                )
-
+                login(request, profile.user)
                 return JsonResponse({
                     "status": "success",
                     "message": "Đăng nhập thành công!",
@@ -296,12 +353,45 @@ def verify_qr_login(request):
                 ),
             })
 
-        except Exception as e:
 
-            return JsonResponse({
-                "status": "error",
-                "message": str(e),
-            })
+
+
+        except json.JSONDecodeError:
+
+            return JsonResponse(
+
+                {
+
+                    "status": "error",
+
+                    "message": "Dữ liệu đăng nhập không hợp lệ.",
+
+                },
+
+                status=400,
+
+            )
+
+
+        except Exception:
+
+            return JsonResponse(
+
+                {
+
+                    "status": "error",
+
+                    "message": (
+
+                        "Không thể xử lý yêu cầu đăng nhập lúc này."
+
+                    ),
+
+                },
+
+                status=500,
+
+            )
 
     return JsonResponse({
         "status": "error",
@@ -346,15 +436,691 @@ def profile_view(request):
         )
 
         return redirect("profile")
-
+    face_profile = FaceProfile.objects.filter(
+        user_profile=user_profile
+    ).first()
     return render(
         request,
         "profile.html",
         {
             "title": "Hồ sơ cá nhân",
             "profile": user_profile,
+            "face_profile": face_profile,
         },
     )
+
+
+
+# ============================================================
+# FACE REGISTRATION
+# ============================================================
+
+@login_required(login_url="qr_login_page")
+@require_POST
+def register_face(request):
+    """
+    Đăng ký vector khuôn mặt cho tài khoản đang đăng nhập.
+    Không lưu ảnh webcam gốc.
+    """
+
+    try:
+        data = json.loads(request.body or "{}")
+
+        # Người dùng phải đồng ý trước khi đăng ký.
+        if data.get("consent") is not True:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Bạn cần đồng ý đăng ký khuôn mặt.",
+                },
+                status=400,
+            )
+
+        image_data = data.get("image", "")
+
+        if not isinstance(image_data, str) or not image_data.startswith(
+            "data:image/"
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Dữ liệu ảnh không hợp lệ.",
+                },
+                status=400,
+            )
+
+        # Chỉ chấp nhận ảnh JPEG hoặc PNG dạng Data URL.
+        header, separator, encoded_image = image_data.partition(",")
+
+        if (
+            not separator
+            or header.split(";")[0]
+            not in ("data:image/jpeg", "data:image/png")
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Chỉ chấp nhận ảnh JPEG hoặc PNG.",
+                },
+                status=400,
+            )
+
+        # Kiểm tra kích thước dữ liệu trước khi giải mã.
+        if len(encoded_image) > 3 * 1024 * 1024:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Ảnh quá lớn. Vui lòng chụp lại.",
+                },
+                status=413,
+            )
+
+        try:
+            image_bytes = base64.b64decode(
+                encoded_image,
+                validate=True,
+            )
+        except (ValueError, base64.binascii.Error):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không thể đọc dữ liệu ảnh.",
+                },
+                status=400,
+            )
+
+        # Giới hạn kích thước ảnh sau khi giải mã.
+        if len(image_bytes) > 2 * 1024 * 1024:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Ảnh vượt quá giới hạn 2 MB.",
+                },
+                status=413,
+            )
+
+        # Không cho phép đăng ký lại tự động để tránh ghi đè
+        # hồ sơ khuôn mặt đã đăng ký.
+        if FaceProfile.objects.filter(
+            user_profile__user=request.user
+        ).exists():
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "face_already_registered",
+                    "message": (
+                        "Tài khoản đã có hồ sơ khuôn mặt. "
+                        "Vui lòng liên hệ quản trị viên nếu cần đăng ký lại."
+                    ),
+                },
+                status=409,
+            )
+
+        # Import tại chỗ để không tải mô hình AI khi Django khởi động.
+        import numpy as np
+        from deepface import DeepFace
+        from PIL import Image, UnidentifiedImageError
+
+        try:
+            with Image.open(BytesIO(image_bytes)) as source_image:
+                source_image.verify()
+
+            with Image.open(BytesIO(image_bytes)) as source_image:
+                if source_image.format not in ("JPEG", "PNG"):
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Định dạng ảnh không hợp lệ.",
+                        },
+                        status=400,
+                    )
+
+                if (
+                    source_image.width < 160
+                    or source_image.height < 160
+                    or source_image.width > 3000
+                    or source_image.height > 3000
+                ):
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": (
+                                "Kích thước ảnh không phù hợp. "
+                                "Vui lòng chụp lại."
+                            ),
+                        },
+                        status=400,
+                    )
+
+                image_array = np.asarray(
+                    source_image.convert("RGB")
+                )
+
+        except (UnidentifiedImageError, OSError, ValueError):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Tệp gửi lên không phải ảnh hợp lệ.",
+                },
+                status=400,
+            )
+
+        # Phát hiện khuôn mặt và tạo vector đặc trưng.
+        representations = DeepFace.represent(
+            img_path=image_array,
+            model_name="Facenet512",
+            detector_backend="opencv",
+            enforce_detection=True,
+        )
+
+        if len(representations) != 1:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "Ảnh phải có đúng một khuôn mặt. "
+                        "Vui lòng chụp lại trong điều kiện đủ sáng."
+                    ),
+                },
+                status=400,
+            )
+
+        embedding = representations[0].get("embedding")
+
+        if not embedding or len(embedding) != 512:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không thể tạo vector khuôn mặt hợp lệ.",
+                },
+                status=422,
+            )
+
+        user_profile = get_object_or_404(
+            UserProfile,
+            user=request.user,
+        )
+
+        FaceProfile.objects.create(
+            user_profile=user_profile,
+            embedding=[float(value) for value in embedding],
+            model_name="Facenet512",
+            detector_backend="opencv",
+            is_active=True,
+            consented_at=timezone.now(),
+        )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Đăng ký khuôn mặt thành công!",
+            }
+        )
+
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Dữ liệu gửi lên không hợp lệ.",
+            },
+            status=400,
+        )
+
+    except Exception:
+        # Không trả chi tiết lỗi nội bộ hoặc dữ liệu nhạy cảm
+        # về trình duyệt.
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Không thể xử lý khuôn mặt lúc này. "
+                    "Vui lòng thử lại."
+                ),
+            },
+            status=500,
+        )
+
+
+
+# ============================================================
+# FACE LOGIN
+# ============================================================
+
+# @login_required(login_url="qr_login_page")
+# def _face_login_placeholder(request):
+#     return redirect("home")
+
+@ratelimit(key="ip", rate="5/m", method="POST", block=False)
+@require_POST
+def verify_face_login(request):
+    """
+    Đăng nhập bằng cách so sánh khuôn mặt với hồ sơ đã đăng ký.
+    Không lưu ảnh webcam được gửi lên.
+    """
+
+    if getattr(request, "limited", False):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Bạn đã gửi quá nhiều yêu cầu đăng nhập. "
+                    "Vui lòng thử lại sau một phút."
+                ),
+            },
+            status=429,
+        )
+
+    try:
+        data = json.loads(request.body or "{}")
+
+        if data.get("consent") is not True:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Bạn cần đồng ý sử dụng khuôn mặt để đăng nhập.",
+                },
+                status=400,
+            )
+
+        image_data = data.get("image", "")
+
+        if not isinstance(image_data, str):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Dữ liệu ảnh không hợp lệ.",
+                },
+                status=400,
+            )
+
+        header, separator, encoded_image = image_data.partition(",")
+
+        if (
+            not separator
+            or header.split(";")[0]
+            not in ("data:image/jpeg", "data:image/png")
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Chỉ chấp nhận ảnh JPEG hoặc PNG.",
+                },
+                status=400,
+            )
+
+        if len(encoded_image) > 3 * 1024 * 1024:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Ảnh quá lớn. Vui lòng chụp lại.",
+                },
+                status=413,
+            )
+
+        try:
+            image_bytes = base64.b64decode(
+                encoded_image,
+                validate=True,
+            )
+        except (ValueError, base64.binascii.Error):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không thể đọc dữ liệu ảnh.",
+                },
+                status=400,
+            )
+
+        if len(image_bytes) > 2 * 1024 * 1024:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Ảnh vượt quá giới hạn 2 MB.",
+                },
+                status=413,
+            )
+
+        import numpy as np
+        from PIL import Image, UnidentifiedImageError
+        from deepface import DeepFace
+
+        try:
+            with Image.open(BytesIO(image_bytes)) as source_image:
+                source_image.verify()
+
+            with Image.open(BytesIO(image_bytes)) as source_image:
+                if source_image.format not in ("JPEG", "PNG"):
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Định dạng ảnh không hợp lệ.",
+                        },
+                        status=400,
+                    )
+
+                if (
+                    source_image.width < 160
+                    or source_image.height < 160
+                    or source_image.width > 3000
+                    or source_image.height > 3000
+                ):
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": "Kích thước ảnh không phù hợp.",
+                        },
+                        status=400,
+                    )
+
+                image_array = np.asarray(
+                    source_image.convert("RGB")
+                )
+
+        except (UnidentifiedImageError, OSError, ValueError):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Tệp gửi lên không phải ảnh hợp lệ.",
+                },
+                status=400,
+            )
+
+        # Phát hiện đúng một khuôn mặt trong ảnh đăng nhập.
+        representations = DeepFace.represent(
+            img_path=image_array,
+            model_name="Facenet512",
+            detector_backend="opencv",
+            enforce_detection=True,
+        )
+
+        if len(representations) != 1:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "Ảnh phải có đúng một khuôn mặt. "
+                        "Vui lòng thử lại."
+                    ),
+                },
+                status=400,
+            )
+
+        # query_embedding = representations[0].get("embedding")
+        #
+        # if not query_embedding or len(query_embedding) != 512:
+        #     return JsonResponse(
+        #         {
+        #             "success": False,
+        #             "message": "Không thể nhận diện khuôn mặt.",
+        #         },
+        #         status=422,
+        #     )
+        #
+        # # Chỉ lấy hồ sơ đang bật và tài khoản đang hoạt động.
+        # face_profiles = FaceProfile.objects.filter(
+        #     is_active=True,
+        #     model_name="Facenet512",
+        #     user_profile__user__is_active=True,
+        # ).select_related(
+        #     "user_profile",
+        #     "user_profile__user",
+        # )
+        #
+        # candidates = []
+        #
+        # # Tính cosine distance giữa vector mới và vector đã lưu.
+        # query_norm = math.sqrt(
+        #     sum(float(value) ** 2 for value in query_embedding)
+        # )
+        #
+        # if query_norm == 0:
+        #     return JsonResponse(
+        #         {
+        #             "success": False,
+        #             "message": "Vector khuôn mặt không hợp lệ.",
+        #         },
+        #         status=422,
+        #     )
+        #
+        # for face_profile in face_profiles:
+        #     stored_embedding = face_profile.embedding
+        #
+        #     if (
+        #         not isinstance(stored_embedding, list)
+        #         or len(stored_embedding) != 512
+        #     ):
+        #         continue
+        #
+        #     stored_norm = math.sqrt(
+        #         sum(float(value) ** 2 for value in stored_embedding)
+        #     )
+        #
+        #     if stored_norm == 0:
+        #         continue
+        #
+        #     dot_product = sum(
+        #         float(a) * float(b)
+        #         for a, b in zip(query_embedding, stored_embedding)
+        #     )
+        #
+        #     cosine_similarity = dot_product / (
+        #         query_norm * stored_norm
+        #     )
+        #
+        #     cosine_distance = 1.0 - cosine_similarity
+        #
+        #     candidates.append(
+        #         (cosine_distance, face_profile)
+        #     )
+
+
+        query_embedding = representations[0].get("embedding")
+
+        if not is_valid_face_embedding(query_embedding):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không thể nhận diện khuôn mặt.",
+                },
+                status=422,
+            )
+
+        # Chuẩn hóa embedding đầu vào thành số thực.
+        query_embedding = [
+            float(value) for value in query_embedding
+        ]
+
+        query_norm = math.sqrt(
+            sum(value ** 2 for value in query_embedding)
+        )
+
+        # Chỉ lấy hồ sơ đang bật và tài khoản đang hoạt động.
+        face_profiles = FaceProfile.objects.filter(
+            is_active=True,
+            model_name="Facenet512",
+            user_profile__user__is_active=True,
+        ).select_related(
+            "user_profile",
+            "user_profile__user",
+        )
+
+        candidates = []
+
+        for face_profile in face_profiles:
+            stored_embedding = face_profile.embedding
+
+            # Bỏ qua hồ sơ có vector bị hỏng hoặc không hợp lệ.
+            if not is_valid_face_embedding(stored_embedding):
+                logger.warning(
+                    "FaceProfile id=%s có embedding không hợp lệ.",
+                    face_profile.pk,
+                )
+                continue
+
+            try:
+                stored_embedding = [
+                    float(value) for value in stored_embedding
+                ]
+
+                stored_norm = math.sqrt(
+                    sum(value ** 2 for value in stored_embedding)
+                )
+
+                dot_product = sum(
+                    a * b
+                    for a, b in zip(
+                        query_embedding,
+                        stored_embedding,
+                    )
+                )
+
+                cosine_similarity = dot_product / (
+                    query_norm * stored_norm
+                )
+
+                # Hạn chế sai số số thực khi tính cosine.
+                cosine_similarity = max(
+                    -1.0,
+                    min(1.0, cosine_similarity),
+                )
+
+                cosine_distance = 1.0 - cosine_similarity
+
+                if not math.isfinite(cosine_distance):
+                    continue
+
+                candidates.append(
+                    (cosine_distance, face_profile)
+                )
+
+            except (TypeError, ValueError, OverflowError, ZeroDivisionError):
+                logger.warning(
+                    "Không thể so sánh embedding FaceProfile id=%s.",
+                    face_profile.pk,
+                )
+                continue
+
+
+        if not candidates:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "Không tìm thấy hồ sơ khuôn mặt đã đăng ký."
+                    ),
+                },
+                status=401,
+            )
+
+        candidates.sort(key=lambda item: item[0])
+
+        best_distance, best_profile = candidates[0]
+
+        # Ngưỡng ban đầu để thử nghiệm, cần hiệu chỉnh bằng dữ liệu thực tế.
+        threshold = 0.30
+
+        # Nếu hai tài khoản có kết quả quá gần nhau thì từ chối.
+        if len(candidates) > 1:
+            second_distance = candidates[1][0]
+
+            if second_distance - best_distance < 0.05:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": (
+                            "Khuôn mặt chưa đủ rõ để xác định tài khoản. "
+                            "Vui lòng thử lại."
+                        ),
+                    },
+                    status=401,
+                )
+
+        if best_distance > threshold:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "Không nhận diện được khuôn mặt đã đăng ký."
+                    ),
+                },
+                status=401,
+            )
+
+        user = best_profile.user_profile.user
+
+        if not user.is_active:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Tài khoản đã bị vô hiệu hóa.",
+                },
+                status=403,
+            )
+
+        # Không đăng nhập nếu tài khoản đã được xác thực trên phiên khác
+        # trong cùng request; request đăng nhập thông thường là anonymous.
+        login(request, user)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Đăng nhập bằng khuôn mặt thành công!",
+                "redirect_url": "/",
+            }
+        )
+
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Dữ liệu gửi lên không hợp lệ.",
+            },
+            status=400,
+        )
+
+    except Exception:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Không thể xử lý khuôn mặt lúc này. "
+                    "Vui lòng thử lại."
+                ),
+            },
+            status=500,
+        )
+
+
+def is_valid_face_embedding(embedding):
+    """
+    Kiểm tra embedding có đúng 512 giá trị số hữu hạn
+    và có độ lớn khác 0 hay không.
+    """
+    if not isinstance(embedding, (list, tuple)):
+        return False
+
+    if len(embedding) != 512:
+        return False
+
+    try:
+        for value in embedding:
+            # Không chấp nhận bool dù Python xem bool là kiểu số.
+            if isinstance(value, bool):
+                return False
+
+            number = float(value)
+
+            if not math.isfinite(number):
+                return False
+
+        norm = math.sqrt(
+            sum(float(value) ** 2 for value in embedding)
+        )
+
+        return math.isfinite(norm) and norm > 0
+
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 # ============================================================
@@ -1016,12 +1782,49 @@ def run_code(request):
                 status=400,
             )
 
+        # student_exam = get_object_or_404(
+        #     StudentExam,
+        #     id=student_exam_id,
+        #     student=request.user,
+        #     is_submitted=False,
+        # )
         student_exam = get_object_or_404(
             StudentExam,
             id=student_exam_id,
             student=request.user,
-            is_submitted=False,
         )
+
+        if student_exam.is_submitted:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_submitted",
+                    "message": "Bài thi đã được nộp, không thể chạy code.",
+                },
+                status=409,
+            )
+        if student_exam.is_terminated:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_terminated",
+                    "message": "Bài thi đã kết thúc.",
+                },
+                status=409,
+            )
+
+        if student_exam.is_locked:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_locked",
+                    "message": (
+                        "Bài thi đang tạm dừng "
+                        "và chờ giảng viên xử lý."
+                    ),
+                },
+                status=423,
+            )
 
         question = _find_snapshot_question(
             student_exam,
@@ -1239,7 +2042,7 @@ def run_code(request):
                 question_index
             ),
             defaults={
-                "question": None,
+                # "question": None,
                 "question_type": "CODE",
                 "answer_text": code,
                 "answer_payload": {
@@ -1261,24 +2064,62 @@ def run_code(request):
             }
         )
 
+
+
     except json.JSONDecodeError:
 
         return JsonResponse(
+
             {
+
                 "success": False,
+
                 "message": "Dữ liệu JSON không hợp lệ.",
+
             },
+
             status=400,
+
         )
+
+
+    except Http404:
+
+        return JsonResponse(
+
+            {
+
+                "success": False,
+
+                "message": (
+
+                    "Không tìm thấy lượt thi "
+
+                    "hoặc bạn không có quyền truy cập."
+
+                ),
+
+            },
+
+            status=404,
+
+        )
+
 
     except Exception as e:
 
         return JsonResponse(
+
             {
+
                 "success": False,
+
                 "message": str(e),
+
             },
+
             status=500,
+
         )
 
 
@@ -2047,30 +2888,118 @@ def _submission_data_from_drafts(
 # AUTOSAVE VIEW
 # ============================================================
 
+# @login_required
+# @require_POST
+# def autosave_exam(
+#     request,
+#     student_exam_id,
+# ):
+#
+#     student_exam = get_object_or_404(
+#         StudentExam,
+#         id=student_exam_id,
+#         student=request.user,
+#         is_submitted=False,
+#     )
+#
+#     # if student_exam.is_terminated:
+#     #
+#     #     return JsonResponse(
+#     #         {
+#     #             "success": False,
+#     #             "message": "Bài thi đã bị dừng.",
+#     #         },
+#     #         status=409,
+#     #     )
+#
+#     if student_exam.is_terminated:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "message": "Bài thi đã bị kết thúc.",
+#             },
+#             status=409,
+#         )
+#
+#     if student_exam.is_locked:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "code": "exam_locked",
+#                 "message": (
+#                     "Bài thi đang tạm dừng "
+#                     "và chờ giảng viên xử lý."
+#                 ),
+#             },
+#             status=423,
+#         )
+#
+#     saved_count = _save_exam_draft(
+#         student_exam,
+#         request.POST,
+#     )
+#
+#     return JsonResponse(
+#         {
+#             "success": True,
+#             "saved_count": saved_count,
+#         }
+#     )
+
+
+
 @login_required
 @require_POST
 def autosave_exam(
     request,
     student_exam_id,
 ):
-
     student_exam = get_object_or_404(
         StudentExam,
         id=student_exam_id,
         student=request.user,
-        is_submitted=False,
     )
 
+    # 1. Bài thi đã bị kết thúc do vi phạm
     if student_exam.is_terminated:
-
         return JsonResponse(
             {
                 "success": False,
-                "message": "Bài thi đã bị dừng.",
+                "code": "exam_terminated",
+                "message": "Bài thi đã bị kết thúc.",
             },
             status=409,
         )
 
+    # 2. Bài thi đã nộp: không cho phép sửa đáp án
+    if student_exam.is_submitted:
+        return JsonResponse(
+            {
+                "success": False,
+                "code": "exam_submitted",
+                "message": (
+                    "Bài thi đã được nộp, "
+                    "không thể lưu thêm đáp án."
+                ),
+            },
+            status=409,
+        )
+
+    # 3. Bài thi đang bị khóa: không cho phép lưu
+    if student_exam.is_locked:
+        return JsonResponse(
+            {
+                "success": False,
+                "code": "exam_locked",
+                "message": (
+                    "Bài thi đang tạm dừng "
+                    "và chờ giảng viên xử lý."
+                ),
+            },
+            status=423,
+        )
+
+    # 4. Chỉ lưu khi bài thi vẫn hợp lệ
     saved_count = _save_exam_draft(
         student_exam,
         request.POST,
@@ -2115,6 +3044,21 @@ def proctor_exam_frame(
     frame = request.FILES.get(
         "frame"
     )
+
+    if student_exam.is_locked:
+        return JsonResponse(
+            {
+                "success": False,
+                "code": "exam_locked",
+                "locked": True,
+                "warning_count": student_exam.warning_count,
+                "message": (
+                    "Bài thi đang chờ "
+                    "giảng viên xử lý."
+                ),
+            },
+            status=423,
+        )
 
     if not frame:
 
@@ -2492,6 +3436,16 @@ def submit_exam(
             "exam_result",
             student_exam_id=student_exam.pk,
         )
+    if student_exam.is_terminated:
+        return redirect(
+            "exam_result",
+            student_exam_id=student_exam.pk,
+        )
+    if student_exam.is_locked:
+        return redirect(
+            "take_exam",
+            exam_id=student_exam.exam_id,
+        )
 
     if request.method != "POST":
 
@@ -2531,16 +3485,297 @@ def is_teacher(user):
         )
     )
 
+def _teacher_can_manage_student_exam(user, student_exam):
+    """
+    Kiểm tra user có quyền xử lý StudentExam hay không.
+
+    - staff/superuser/admin: được phép.
+    - lecturer: chỉ được xử lý bài thi thuộc CourseOffering
+      mà giảng viên đang phụ trách.
+    """
+
+    if not is_teacher(user):
+        return False
+
+    if user.is_superuser or user.is_staff:
+        return True
+
+    profile = getattr(user, "userprofile", None)
+
+    if not profile:
+        return False
+
+    if profile.role == "admin":
+        return True
+
+    if profile.role != "lecturer":
+        return False
+
+    offering = student_exam.exam.offering
+
+    if not offering:
+        return False
+
+    return offering.teaching_assignments.filter(
+        lecturer=profile
+    ).exists()
+
+
+@login_required
+@user_passes_test(is_teacher, login_url="home")
+@require_POST
+def teacher_allow_student_exam(request, student_exam_id):
+    """
+    Giảng viên cho phép sinh viên tiếp tục bài thi
+    sau khi bài thi bị khóa do đạt ngưỡng cảnh báo.
+    """
+
+    student_exam = get_object_or_404(
+        StudentExam.objects.select_related(
+            "exam",
+            "exam__offering",
+            "exam__offering__course",
+            "student",
+        ),
+        pk=student_exam_id,
+    )
+
+    if not _teacher_can_manage_student_exam(
+        request.user,
+        student_exam,
+    ):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Bạn không có quyền xử lý "
+                    "bài thi này."
+                ),
+            },
+            status=403,
+        )
+
+    if student_exam.is_submitted:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Bài thi đã được nộp.",
+            },
+            status=409,
+        )
+
+    if student_exam.is_terminated:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Bài thi đã kết thúc.",
+            },
+            status=409,
+        )
+
+    if not student_exam.is_locked:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Bài thi hiện không ở trạng thái "
+                    "chờ giảng viên xử lý."
+                ),
+            },
+            status=409,
+        )
+
+    student_exam.is_locked = False
+
+    # warning_count đại diện cho chu kỳ cảnh báo hiện tại.
+    # Lịch sử vi phạm vẫn nằm trong ProctorEvent.
+    student_exam.warning_count = 0
+
+    student_exam.active_gesture = ""
+    student_exam.gesture_started_at = None
+    student_exam.gesture_warned = False
+
+    student_exam.lock_reason = ""
+    student_exam.locked_at = None
+    student_exam.locked_by = request.user
+
+    student_exam.unlock_count += 1
+
+    student_exam.save(
+        update_fields=[
+            "is_locked",
+            "warning_count",
+            "active_gesture",
+            "gesture_started_at",
+            "gesture_warned",
+            "lock_reason",
+            "locked_at",
+            "locked_by",
+            "unlock_count",
+        ]
+    )
+
+    # return JsonResponse(
+    #     {
+    #         "success": True,
+    #         "message": (
+    #             "Đã cho phép sinh viên tiếp tục "
+    #             "bài thi."
+    #         ),
+    #         "student_exam_id": student_exam.pk,
+    #         "is_locked": False,
+    #         "warning_count": student_exam.warning_count,
+    #         "unlock_count": student_exam.unlock_count,
+    #     }
+    # )
+    return redirect("teacher_monitor")
+
+
+
+@login_required
+@user_passes_test(is_teacher, login_url="home")
+@require_POST
+def teacher_terminate_student_exam(
+    request,
+    student_exam_id,
+):
+    """
+    Giảng viên chủ động kết thúc bài thi
+    của sinh viên đang bị khóa.
+    """
+
+    student_exam = get_object_or_404(
+        StudentExam.objects.select_related(
+            "exam",
+            "exam__offering",
+            "exam__offering__course",
+            "student",
+        ),
+        pk=student_exam_id,
+    )
+
+    if not _teacher_can_manage_student_exam(
+        request.user,
+        student_exam,
+    ):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Bạn không có quyền xử lý "
+                    "bài thi này."
+                ),
+            },
+            status=403,
+        )
+
+    if student_exam.is_submitted:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Bài thi đã được nộp.",
+            },
+            status=409,
+        )
+
+    if student_exam.is_terminated:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Bài thi đã kết thúc.",
+            },
+            status=409,
+        )
+
+    if not student_exam.is_locked:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Bài thi chưa bị khóa. "
+                    "Không thể thực hiện thao tác này."
+                ),
+            },
+            status=409,
+        )
+
+    termination_reason = (
+        request.POST.get("reason")
+        or "Giảng viên kết thúc bài thi sau khi xử lý vi phạm."
+    )
+
+    _grade_student_exam(
+        student_exam,
+        _submission_data_from_drafts(
+            student_exam
+        ),
+        terminated=True,
+        termination_reason=termination_reason,
+    )
+
+    # return JsonResponse(
+    #     {
+    #         "success": True,
+    #         "message": (
+    #             "Đã kết thúc và chấm bài thi "
+    #             "của sinh viên."
+    #         ),
+    #         "student_exam_id": student_exam.pk,
+    #         "is_locked": False,
+    #         "is_submitted": True,
+    #         "is_terminated": True,
+    #         "redirect_url": reverse(
+    #             "exam_result",
+    #             args=(student_exam.pk,),
+    #         ),
+    #     }
+    # )
+    return redirect("teacher_monitor")
+
+
+@login_required
+@require_GET
+def student_exam_status(request, student_exam_id):
+    """
+    API để sinh viên kiểm tra realtime trạng thái bài thi.
+
+    Chỉ sinh viên sở hữu StudentExam mới được xem trạng thái.
+    """
+
+    try:
+        student_exam = StudentExam.objects.select_related(
+            "student",
+            "exam",
+        ).get(
+            pk=student_exam_id,
+            student=request.user,
+        )
+    except StudentExam.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không tìm thấy bài thi."
+            },
+            status=404,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "is_locked": student_exam.is_locked,
+            "warning_count": student_exam.warning_count,
+            "is_submitted": student_exam.is_submitted,
+            "is_terminated": student_exam.is_terminated,
+        }
+    )
+
 
 # ============================================================
 # TEACHER EXAM PDF
 # ============================================================
 
 @login_required
-@user_passes_test(
-    is_teacher,
-    login_url="home",
-)
+@user_passes_test(is_teacher,login_url="home",)
 def teacher_exam_pdf(
     request,
     exam_id,
@@ -3870,4 +5105,968 @@ def lecturer_exam_report(
         request,
         "lecturer_report.html",
         context,
+    )
+
+
+# @login_required
+# @require_POST
+# def report_proctor_violation(request, student_exam_id):
+#     """
+#     Ghi nhận 1 vi phạm giám sát từ trình duyệt.
+#
+#     Browser chỉ gửi tín hiệu đã được giữ đủ lâu.
+#     Server là nơi quyết định warning_count và trạng thái LOCKED.
+#     """
+#
+#     student_exam = get_object_or_404(
+#         StudentExam,
+#         pk=student_exam_id,
+#         student=request.user,
+#         is_submitted=False,
+#     )
+#
+#     if student_exam.is_terminated:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "code": "exam_terminated",
+#                 "message": "Bài thi đã bị dừng.",
+#             },
+#             status=409,
+#         )
+#
+#     if student_exam.is_locked:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "code": "exam_locked",
+#                 "locked": True,
+#                 "warning_count": student_exam.warning_count,
+#                 "message": "Bài thi đang được tạm khóa.",
+#             },
+#             status=423,
+#         )
+#
+#     try:
+#         payload = json.loads(request.body or "{}")
+#         gesture = str(
+#             payload.get("gesture", "")
+#         ).strip()
+#
+#         duration_seconds = int(
+#             payload.get("duration_seconds", 0)
+#         )
+#
+#     except (
+#         json.JSONDecodeError,
+#         TypeError,
+#         ValueError,
+#     ):
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "message": "Dữ liệu cảnh báo không hợp lệ.",
+#             },
+#             status=400,
+#         )
+#
+#     allowed_gestures = {
+#         "looking_left",
+#         "looking_right",
+#         "looking_down",
+#         "tab_switch",
+#     }
+#
+#     if gesture not in allowed_gestures:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "message": "Loại vi phạm không được hỗ trợ.",
+#             },
+#             status=400,
+#         )
+#
+#     if duration_seconds < 2:
+#         return JsonResponse(
+#             {
+#                 "success": False,
+#                 "message": (
+#                     "Thời gian vi phạm chưa đủ "
+#                     "để ghi nhận cảnh báo."
+#                 ),
+#             },
+#             status=400,
+#         )
+#
+#     now = timezone.now()
+#
+#     with transaction.atomic():
+#
+#         locked_exam = (
+#             StudentExam.objects
+#             .select_for_update()
+#             .get(pk=student_exam.pk)
+#         )
+#
+#         if locked_exam.is_submitted:
+#             return JsonResponse(
+#                 {
+#                     "success": False,
+#                     "code": "exam_submitted",
+#                     "message": "Bài thi đã được nộp.",
+#                 },
+#                 status=409,
+#             )
+#
+#         if locked_exam.is_terminated:
+#             return JsonResponse(
+#                 {
+#                     "success": False,
+#                     "code": "exam_terminated",
+#                     "message": "Bài thi đã bị dừng.",
+#                 },
+#                 status=409,
+#             )
+#
+#         if locked_exam.is_locked:
+#             return JsonResponse(
+#                 {
+#                     "success": False,
+#                     "code": "exam_locked",
+#                     "locked": True,
+#                     "warning_count": (
+#                         locked_exam.warning_count
+#                     ),
+#                     "message": (
+#                         "Bài thi đang được tạm khóa."
+#                     ),
+#                 },
+#                 status=423,
+#             )
+#
+#         # Mỗi request hợp lệ = 1 cảnh báo.
+#         locked_exam.warning_count += 1
+#         locked_exam.last_violation_at = now
+#         locked_exam.active_gesture = gesture
+#         locked_exam.gesture_warned = True
+#
+#         should_lock = (
+#             locked_exam.warning_count >= 3
+#         )
+#
+#         update_fields = [
+#             "warning_count",
+#             "last_violation_at",
+#             "active_gesture",
+#             "gesture_warned",
+#         ]
+#
+#         if should_lock:
+#
+#             locked_exam.is_locked = True
+#
+#             locked_exam.lock_reason = (
+#                 "Tự động khóa sau 3 lần "
+#                 "cảnh báo giám sát AI."
+#             )
+#
+#             locked_exam.locked_at = now
+#             locked_exam.locked_by = None
+#
+#             update_fields.extend(
+#                 [
+#                     "is_locked",
+#                     "lock_reason",
+#                     "locked_at",
+#                     "locked_by",
+#                 ]
+#             )
+#
+#         locked_exam.save(
+#             update_fields=update_fields
+#         )
+#
+#         # Bước 8 chỉ lưu metadata.
+#         # Ảnh bằng chứng để Bước 10.
+#         ProctorEvent.objects.create(
+#             student_exam=locked_exam,
+#             exam_computer=locked_exam.exam_computer,
+#             event_type=gesture,
+#             duration_seconds=duration_seconds,
+#         )
+#
+#     if should_lock:
+#
+#         message = (
+#             "Đã đạt 3 lần cảnh báo. "
+#             "Bài thi đã được tạm khóa "
+#             "để giảng viên kiểm tra."
+#         )
+#
+#     else:
+#
+#         message = (
+#             "Hệ thống đã ghi nhận "
+#             "cảnh báo giám sát."
+#         )
+#
+#     return JsonResponse(
+#         {
+#             "success": True,
+#             "warning_created": True,
+#             "warning_count": (
+#                 locked_exam.warning_count
+#             ),
+#             "locked": should_lock,
+#             "message": message,
+#         }
+#     )
+
+
+@login_required
+@require_POST
+def report_proctor_violation(request, student_exam_id):
+    """
+    Ghi nhận một vi phạm giám sát.
+
+    Step 10:
+    - nhận dữ liệu multipart/form-data từ browser
+    - nhận tối đa 1 ảnh webcam làm evidence
+    - lưu ProctorEvent + evidence_image
+    - server vẫn là nơi quyết định warning_count và LOCKED
+    """
+
+    student_exam = get_object_or_404(
+        StudentExam,
+        pk=student_exam_id,
+        student=request.user,
+        is_submitted=False,
+    )
+
+    if student_exam.is_terminated:
+        return JsonResponse(
+            {
+                "success": False,
+                "code": "exam_terminated",
+                "message": "Bài thi đã bị dừng.",
+            },
+            status=409,
+        )
+
+    if student_exam.is_locked:
+        return JsonResponse(
+            {
+                "success": False,
+                "code": "exam_locked",
+                "locked": True,
+                "warning_count": student_exam.warning_count,
+                "message": "Bài thi đang được tạm khóa.",
+            },
+            status=423,
+        )
+
+    # --------------------------------------------------------
+    # Nhận dữ liệu từ multipart/form-data hoặc JSON cũ
+    # --------------------------------------------------------
+
+    evidence_image = request.FILES.get("evidence")
+
+    if request.content_type.startswith("multipart/form-data"):
+        gesture = str(
+            request.POST.get("gesture", "")
+        ).strip()
+
+        try:
+            duration_seconds = int(
+                request.POST.get("duration_seconds", 0)
+            )
+        except (TypeError, ValueError):
+            duration_seconds = 0
+
+    else:
+        try:
+            payload = json.loads(
+                request.body or "{}"
+            )
+            gesture = str(
+                payload.get("gesture", "")
+            ).strip()
+            duration_seconds = int(
+                payload.get("duration_seconds", 0)
+            )
+        except (
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Dữ liệu cảnh báo không hợp lệ.",
+                },
+                status=400,
+            )
+
+    # --------------------------------------------------------
+    # Kiểm tra loại vi phạm
+    # --------------------------------------------------------
+
+    allowed_gestures = {
+        "looking_left",
+        "looking_right",
+        "looking_down",
+        "tab_switch",
+    }
+
+    if gesture not in allowed_gestures:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Loại vi phạm không được hỗ trợ.",
+            },
+            status=400,
+        )
+
+    # Head pose phải tồn tại >= 2 giây.
+    # Tab switch chỉ cần >= 1 giây.
+    minimum_duration = (
+        1
+        if gesture == "tab_switch"
+        else 2
+    )
+
+    if duration_seconds < minimum_duration:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": (
+                    "Thời gian vi phạm chưa đủ "
+                    "để ghi nhận cảnh báo."
+                ),
+            },
+            status=400,
+        )
+
+    # --------------------------------------------------------
+    # Kiểm tra evidence image nếu browser gửi
+    # --------------------------------------------------------
+
+    if evidence_image:
+        max_evidence_size = 2 * 1024 * 1024
+
+        if evidence_image.size > max_evidence_size:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Ảnh bằng chứng vượt quá 2 MB.",
+                },
+                status=400,
+            )
+
+        allowed_content_types = {
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+        }
+
+        if evidence_image.content_type not in allowed_content_types:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Định dạng ảnh bằng chứng không hợp lệ.",
+                },
+                status=400,
+            )
+
+        try:
+            image = Image.open(evidence_image)
+            image.verify()
+            evidence_image.seek(0)
+        except Exception:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không thể xác thực ảnh bằng chứng.",
+                },
+                status=400,
+            )
+
+    now = timezone.now()
+
+    with transaction.atomic():
+        locked_exam = (
+            StudentExam.objects
+            .select_for_update()
+            .get(pk=student_exam.pk)
+        )
+
+        if locked_exam.is_submitted:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_submitted",
+                    "message": "Bài thi đã được nộp.",
+                },
+                status=409,
+            )
+
+        if locked_exam.is_terminated:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_terminated",
+                    "message": "Bài thi đã bị dừng.",
+                },
+                status=409,
+            )
+
+        if locked_exam.is_locked:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_locked",
+                    "locked": True,
+                    "warning_count": locked_exam.warning_count,
+                    "message": "Bài thi đang được tạm khóa.",
+                },
+                status=423,
+            )
+
+        locked_exam.warning_count += 1
+        locked_exam.last_violation_at = now
+        locked_exam.active_gesture = gesture
+        locked_exam.gesture_warned = True
+
+        should_lock = locked_exam.warning_count >= 3
+
+        update_fields = [
+            "warning_count",
+            "last_violation_at",
+            "active_gesture",
+            "gesture_warned",
+        ]
+
+        if should_lock:
+            locked_exam.is_locked = True
+            locked_exam.lock_reason = (
+                "Tự động khóa sau 3 lần cảnh báo giám sát AI."
+            )
+            locked_exam.locked_at = now
+            locked_exam.locked_by = None
+
+            update_fields.extend([
+                "is_locked",
+                "lock_reason",
+                "locked_at",
+                "locked_by",
+            ])
+
+        locked_exam.save(update_fields=update_fields)
+
+        # ----------------------------------------------------
+        # STEP 10: lưu event + ảnh bằng chứng
+        # ----------------------------------------------------
+
+        event = ProctorEvent(
+            student_exam=locked_exam,
+            exam_computer=locked_exam.exam_computer,
+            event_type=gesture,
+            duration_seconds=duration_seconds,
+        )
+
+        if evidence_image:
+            event.evidence_image = evidence_image
+
+        event.save()
+
+    if should_lock:
+        message = (
+            "Đã đạt 3 lần cảnh báo. "
+            "Bài thi đã được tạm khóa để giảng viên kiểm tra."
+        )
+    else:
+        message = "Hệ thống đã ghi nhận cảnh báo giám sát."
+
+    return JsonResponse(
+        {
+            "success": True,
+            "warning_created": True,
+            "warning_count": locked_exam.warning_count,
+            "locked": should_lock,
+            "event_id": event.id,
+            "evidence_saved": bool(event.evidence_image),
+            "message": message,
+        }
+    )
+
+
+@login_required
+@require_POST
+def start_screen_sharing(request, student_exam_id):
+    """
+    Ghi nhận sinh viên bắt đầu chia sẻ màn hình.
+    Chỉ cho phép bắt đầu khi bài thi chưa nộp,
+    chưa kết thúc và chưa bị khóa.
+    """
+    with transaction.atomic():
+        student_exam = get_object_or_404(
+            StudentExam.objects.select_for_update(),
+            pk=student_exam_id,
+            student=request.user,
+        )
+
+        if student_exam.is_submitted:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_submitted",
+                    "message": "Bài thi đã được nộp.",
+                },
+                status=409,
+            )
+
+        if student_exam.is_terminated:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_terminated",
+                    "message": "Bài thi đã kết thúc.",
+                },
+                status=409,
+            )
+
+        if student_exam.is_locked:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "code": "exam_locked",
+                    "message": "Bài thi đang bị tạm khóa.",
+                },
+                status=423,
+            )
+
+        # Không tạo sự kiện trùng nếu trạng thái đã là đang chia sẻ.
+        if student_exam.is_screen_sharing:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "is_screen_sharing": True,
+                    "message": "Màn hình đang được ghi nhận là chia sẻ.",
+                }
+            )
+
+        now = timezone.now()
+
+        student_exam.is_screen_sharing = True
+        student_exam.screen_share_started_at = now
+        student_exam.screen_share_stopped_at = None
+
+        student_exam.save(
+            update_fields=[
+                "is_screen_sharing",
+                "screen_share_started_at",
+                "screen_share_stopped_at",
+            ]
+        )
+
+        event = ProctorEvent.objects.create(
+            student_exam=student_exam,
+            exam_computer=student_exam.exam_computer,
+            event_type="screen_share_started",
+            duration_seconds=0,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "is_screen_sharing": True,
+            "event_id": event.id,
+            "message": "Đã ghi nhận bắt đầu chia sẻ màn hình.",
+        }
+    )
+
+
+@login_required
+@require_POST
+def stop_screen_sharing(request, student_exam_id):
+    """
+    Ghi nhận sinh viên dừng chia sẻ màn hình.
+    Chỉ tạo sự kiện khi trạng thái chuyển từ đang chia sẻ
+    sang đã dừng, tránh ghi nhận trùng.
+    """
+    with transaction.atomic():
+        student_exam = get_object_or_404(
+            StudentExam.objects.select_for_update(),
+            pk=student_exam_id,
+            student=request.user,
+        )
+
+        # Nếu đã dừng thì trả về trạng thái hiện tại.
+        if not student_exam.is_screen_sharing:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "is_screen_sharing": False,
+                    "message": "Màn hình hiện không được ghi nhận là đang chia sẻ.",
+                }
+            )
+
+        now = timezone.now()
+
+        student_exam.is_screen_sharing = False
+        student_exam.screen_share_stopped_at = now
+
+        student_exam.save(
+            update_fields=[
+                "is_screen_sharing",
+                "screen_share_stopped_at",
+            ]
+        )
+
+        event = ProctorEvent.objects.create(
+            student_exam=student_exam,
+            exam_computer=student_exam.exam_computer,
+            event_type="screen_share_stopped",
+            duration_seconds=0,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "is_screen_sharing": False,
+            "event_id": event.id,
+            "message": "Đã ghi nhận dừng chia sẻ màn hình.",
+        }
+    )
+
+
+def _teacher_monitor_queryset(user):
+    """
+    Lấy các StudentExam mà người đang đăng nhập
+    được phép giám sát.
+    """
+
+    queryset = (
+        StudentExam.objects
+        .select_related(
+            "student",
+            "exam",
+            "exam__course",
+            "exam__offering",
+            "exam_computer",
+        )
+        .filter(
+            is_submitted=False
+        )
+        .order_by(
+            "-is_locked",
+            "-warning_count",
+            "-started_at",
+        )
+    )
+
+    # Admin / Staff / Superuser
+    if user.is_staff or user.is_superuser:
+        return queryset
+
+    # Lecturer
+    try:
+        profile = user.userprofile
+    except UserProfile.DoesNotExist:
+        return StudentExam.objects.none()
+
+    if profile.role != "lecturer":
+        return StudentExam.objects.none()
+
+    return queryset.filter(
+        exam__offering__teaching_assignments__lecturer=profile
+    ).distinct()
+@login_required
+def teacher_monitor_view(request):
+
+    if not (
+        request.user.is_staff
+        or request.user.is_superuser
+    ):
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            return HttpResponseForbidden(
+                "Bạn không có quyền truy cập Teacher Monitor."
+            )
+
+        if profile.role != "lecturer":
+            return HttpResponseForbidden(
+                "Bạn không có quyền truy cập Teacher Monitor."
+            )
+
+    student_exams = list(
+        _teacher_monitor_queryset(request.user)
+    )
+
+    exam_ids = [
+        student_exam.id
+        for student_exam in student_exams
+    ]
+
+    events_by_exam = defaultdict(list)
+
+    if exam_ids:
+
+        events = (
+            ProctorEvent.objects
+            .filter(
+                student_exam_id__in=exam_ids
+            )
+            .order_by("-created_at")
+        )
+
+        for event in events:
+            events_by_exam[
+                event.student_exam_id
+            ].append(event)
+
+    monitor_rows = []
+
+    for student_exam in student_exams:
+
+        events = events_by_exam.get(
+            student_exam.id,
+            []
+        )
+
+        latest_event = (
+            events[0]
+            if events
+            else None
+        )
+
+        student_name = (
+            student_exam.student
+            .get_full_name()
+            .strip()
+        )
+
+        if not student_name:
+            student_name = (
+                student_exam.student.username
+            )
+
+        computer = student_exam.exam_computer
+
+        monitor_rows.append(
+            {
+                "student_exam": student_exam,
+
+                "student_name": student_name,
+
+                "username": (
+                    student_exam.student.username
+                ),
+
+                "computer_number": (
+                    computer.computer_number
+                    if computer
+                    else None
+                ),
+
+                "computer_status": (
+                    computer.get_status_display()
+                    if computer
+                    else "Chưa gán máy"
+                ),
+
+                "latest_event": latest_event,
+
+                "events": events[:10],
+            }
+        )
+
+    return render(
+        request,
+        "exam/teacher_monitor.html",
+        {
+            "monitor_rows": monitor_rows,
+            "monitor_count": len(monitor_rows),
+        },
+    )
+
+@login_required
+def teacher_monitor_data(request):
+    if not (
+        request.user.is_staff
+        or request.user.is_superuser
+    ):
+        try:
+            profile = request.user.userprofile
+        except UserProfile.DoesNotExist:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không có quyền.",
+                },
+                status=403,
+            )
+
+        if profile.role != "lecturer":
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Không có quyền.",
+                },
+                status=403,
+            )
+
+    student_exams = list(
+        _teacher_monitor_queryset(request.user)
+    )
+
+    exam_ids = [
+        student_exam.id
+        for student_exam in student_exams
+    ]
+
+    events_by_exam = defaultdict(list)
+
+    if exam_ids:
+        events = (
+            ProctorEvent.objects
+            .filter(
+                student_exam_id__in=exam_ids
+            )
+            .order_by("-created_at")
+        )
+
+        for event in events:
+            # Chỉ giữ tối đa 10 sự kiện gần nhất cho mỗi lượt thi.
+            if len(events_by_exam[event.student_exam_id]) < 10:
+                events_by_exam[event.student_exam_id].append(event)
+
+    rows = []
+
+    for student_exam in student_exams:
+        computer = student_exam.exam_computer
+        latest_events = events_by_exam.get(
+            student_exam.id,
+            [],
+        )
+        latest_event = (
+            latest_events[0]
+            if latest_events
+            else None
+        )
+
+        student_name = (
+            student_exam.student
+            .get_full_name()
+            .strip()
+        )
+
+        if not student_name:
+            student_name = (
+                student_exam.student.username
+            )
+
+        offering = student_exam.exam.offering
+
+        rows.append(
+            {
+                "student_exam_id": student_exam.id,
+                "student_name": student_name,
+                "username": student_exam.student.username,
+                "exam_title": student_exam.exam.title,
+                "group_code": (
+                    offering.group_code
+                    if offering
+                    else ""
+                ),
+                "classroom": (
+                    offering.classroom
+                    if offering
+                    else ""
+                ),
+                "computer_number": (
+                    computer.computer_number
+                    if computer
+                    else None
+                ),
+                "computer_status": (
+                    computer.get_status_display()
+                    if computer
+                    else "Chưa gán máy"
+                ),
+                "warning_count": student_exam.warning_count,
+                "is_screen_sharing": student_exam.is_screen_sharing,
+                "screen_share_started_at": (
+                    student_exam.screen_share_started_at.isoformat()
+                    if student_exam.screen_share_started_at
+                    else None
+                ),
+                "screen_share_stopped_at": (
+                    student_exam.screen_share_stopped_at.isoformat()
+                    if student_exam.screen_share_stopped_at
+                    else None
+                ),
+                "is_locked": student_exam.is_locked,
+                "is_submitted": student_exam.is_submitted,
+                "is_terminated": student_exam.is_terminated,
+                "lock_reason": student_exam.lock_reason,
+                "active_gesture": student_exam.active_gesture,
+                "last_violation_at": (
+                    student_exam.last_violation_at.isoformat()
+                    if student_exam.last_violation_at
+                    else None
+                ),
+                "latest_event": (
+                    {
+                        "id": latest_event.id,
+                        "event_type": latest_event.event_type,
+                        "event_type_display": (
+                            latest_event.get_event_type_display()
+                        ),
+                        "duration_seconds": (
+                            latest_event.duration_seconds
+                        ),
+                        "created_at": (
+                            latest_event.created_at.isoformat()
+                        ),
+                        "evidence_url": (
+                            latest_event.evidence_image.url
+                            if latest_event.evidence_image
+                            else ""
+                        ),
+                    }
+                    if latest_event
+                    else None
+                ),
+                "events": [
+                    {
+                        "id": event.id,
+                        "event_type": event.event_type,
+                        "event_type_display": (
+                            event.get_event_type_display()
+                        ),
+                        "duration_seconds": (
+                            event.duration_seconds
+                        ),
+                        "created_at": (
+                            event.created_at.isoformat()
+                        ),
+                        "evidence_url": (
+                            event.evidence_image.url
+                            if event.evidence_image
+                            else ""
+                        ),
+                    }
+                    for event in latest_events
+                ],
+            }
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "count": len(rows),
+            "rows": rows,
+        }
     )

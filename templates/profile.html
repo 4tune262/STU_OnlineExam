@@ -1,165 +1,437 @@
-{% extends "base.html" %} {% load static %} {% block body_block %}
-<div class="container mt-4">
-  <div class="row">
-    <!-- Cột hiển thị thông tin & Mã QR -->
-    <div class="col-md-4 text-center">
-      <div class="card shadow-sm p-4 mb-4">
-        <img
-          src="{{ profile.avatar_display_url }}"
-          class="rounded-circle img-thumbnail mx-auto mb-3"
-          style="width: 150px; height: 150px; object-fit: cover"
-          alt="Avatar"
-        />
-        <h4>{{ profile.user.get_full_name|default:profile.user.username }}</h4>
-        <p class="text-muted mb-1">
-          Vai trò: <strong>{{ profile.get_role_display }}</strong>
-        </p>
-        {% if profile.role == "student" %}
-        <p class="text-muted">
-          Mã sinh viên:
-          <strong>{{ profile.student_id|default:"Chưa cập nhật" }}</strong>
-        </p>
-        {% elif profile.role == "lecturer" %}
-        <p class="text-muted">
-          Mã giảng viên:
-          <strong>{{ profile.lecturer_id|default:"Chưa cập nhật" }}</strong>
-        </p>
-        {% endif %}
+{% extends "base.html" %}
+{% load static %}
 
-        <hr />
+{% block body_block %}
+<style>
+  .profile-page {
+    --stu-blue: #0647a6;
+    --stu-blue-dark: #073579;
+    --stu-blue-soft: #edf4ff;
+    --stu-ink: #18243b;
+    --stu-muted: #6b7890;
+    --stu-border: #e5eaf2;
+    color: var(--stu-ink);
+    padding: 28px 0 48px;
+  }
+  .profile-page * { box-sizing: border-box; }
+  .profile-page .page-heading { margin-bottom: 24px; }
+  .profile-page .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--stu-blue); font-size: .76rem; font-weight: 800;
+    letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .profile-page .page-title { font-weight: 800; letter-spacing: -.035em; margin: 0; font-size: clamp(1.7rem, 3vw, 2.25rem); }
+  .profile-page .page-subtitle { color: var(--stu-muted); margin: 8px 0 0; }
+  .profile-page .panel {
+    height: 100%; background: #fff; border: 1px solid var(--stu-border);
+    border-radius: 22px; box-shadow: 0 12px 35px rgba(22, 43, 77, .055); overflow: hidden;
+  }
+  .profile-page .panel-body { padding: clamp(20px, 3vw, 30px); }
+  .profile-page .profile-banner {
+    position: relative; padding: 28px 22px 24px; text-align: center;
+    color: #fff; background: linear-gradient(135deg, #06377f 0%, #0759c7 58%, #3a8be8 100%);
+    overflow: hidden;
+  }
+  .profile-page .profile-banner:before,
+  .profile-page .profile-banner:after {
+    content: ""; position: absolute; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; pointer-events: none;
+  }
+  .profile-page .profile-banner:before { width: 210px; height: 210px; right: -75px; top: -125px; }
+  .profile-page .profile-banner:after { width: 160px; height: 160px; left: -82px; bottom: -105px; }
+  .profile-page .avatar-wrap { position: relative; z-index: 1; display: inline-block; margin-bottom: 14px; }
+  .profile-page .avatar-img {
+    width: 112px; height: 112px; object-fit: cover; border-radius: 50%;
+    border: 4px solid rgba(255,255,255,.95); box-shadow: 0 8px 24px rgba(0,0,0,.18); background: #fff;
+  }
+  .profile-page .profile-name { position: relative; z-index: 1; font-size: 1.25rem; font-weight: 800; margin: 0 0 7px; overflow-wrap: anywhere; }
+  .profile-page .profile-role { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); font-size: .82rem; }
+  .profile-page .identity-list { padding: 20px 22px 8px; }
+  .profile-page .identity-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
+  .profile-page .identity-row:last-child { border-bottom: 0; }
+  .profile-page .identity-icon { flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: var(--stu-blue); background: var(--stu-blue-soft); font-size: 1.05rem; }
+  .profile-page .identity-label { color: var(--stu-muted); font-size: .78rem; margin-bottom: 3px; }
+  .profile-page .identity-value { font-weight: 700; font-size: .92rem; overflow-wrap: anywhere; }
+  .profile-page .section-title { display: flex; align-items: center; gap: 12px; margin: 0 0 5px; font-size: 1.12rem; font-weight: 800; }
+  .profile-page .section-icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; color: var(--stu-blue); background: var(--stu-blue-soft); font-size: 1.15rem; }
+  .profile-page .section-description { color: var(--stu-muted); font-size: .9rem; margin: 0 0 22px; }
+  .profile-page .form-label { color: #34415a; font-size: .86rem; font-weight: 700; margin-bottom: 7px; }
+  .profile-page .form-control { min-height: 45px; border-color: #dce3ee; border-radius: 11px; padding: 10px 13px; color: var(--stu-ink); }
+  .profile-page textarea.form-control { min-height: 96px; resize: vertical; }
+  .profile-page .form-control:focus { border-color: #75a8f4; box-shadow: 0 0 0 .22rem rgba(13, 92, 198, .11); }
+  .profile-page .form-control:disabled { background: #f5f7fb; color: #69758b; opacity: 1; }
+  .profile-page .form-hint { color: #8590a3; font-size: .76rem; margin-top: 6px; }
+  .profile-page .btn-stu { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; border: 0; border-radius: 11px; padding: 10px 17px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #0753b8, #0876df); box-shadow: 0 7px 16px rgba(5, 82, 183, .18); transition: transform .18s ease, box-shadow .18s ease; }
+  .profile-page .btn-stu:hover { color: #fff; transform: translateY(-1px); box-shadow: 0 10px 20px rgba(5, 82, 183, .24); }
+  .profile-page .btn-outline-stu { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; border: 1px solid #c8d8f0; border-radius: 10px; padding: 9px 13px; color: var(--stu-blue); background: #fff; font-weight: 700; text-decoration: none; }
+  .profile-page .btn-outline-stu:hover { background: var(--stu-blue-soft); color: var(--stu-blue-dark); }
+  .profile-page .security-panel { margin-top: 22px; }
+  .profile-page .security-card { border: 1px solid var(--stu-border); border-radius: 16px; padding: 20px; height: 100%; background: linear-gradient(180deg, #fff, #fbfcff); }
+  .profile-page .security-card-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .profile-page .security-card h4 { font-size: 1rem; font-weight: 800; margin: 0 0 5px; }
+  .profile-page .security-card p { color: var(--stu-muted); font-size: .85rem; margin: 0; }
+  .profile-page .qr-frame { display: grid; place-items: center; background: #fff; border: 1px dashed #d3dce9; border-radius: 15px; padding: 14px; margin: 16px auto; max-width: 230px; min-height: 190px; }
+  .profile-page .qr-image { max-width: 180px; width: 100%; height: auto; }
+  .profile-page .status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 7px 10px; font-size: .78rem; font-weight: 800; }
+  .profile-page .status-success { color: #137547; background: #eaf8f0; }
+  .profile-page .status-pending { color: #8b5a08; background: #fff5df; }
+  .profile-page .face-video-wrap { background: #101827; border-radius: 15px; padding: 8px; overflow: hidden; }
+  .profile-page #face-camera { display: block; width: 100%; max-width: 100%; max-height: 340px; object-fit: cover; border-radius: 10px; background: #101827; }
+  .profile-page .face-camera-placeholder { display: grid; place-items: center; min-height: 190px; padding: 24px; color: #d9e5f7; text-align: center; }
+  .profile-page .face-camera-placeholder i { display: block; font-size: 2.3rem; margin-bottom: 10px; }
+  .profile-page .form-check { display: flex; align-items: flex-start; gap: 9px; padding: 13px; background: #f5f8fd; border: 1px solid #e3eaf5; border-radius: 12px; }
+  .profile-page .form-check-input { flex: 0 0 auto; margin: 4px 0 0; }
+  .profile-page .form-check-label { color: #4d5b73; font-size: .84rem; line-height: 1.55; }
+  .profile-page .alert { border-radius: 12px; }
+  .profile-page .message-stack .alert { margin-bottom: 10px; }
+  .profile-page .small-note { color: var(--stu-muted); font-size: .78rem; line-height: 1.55; }
+  @media (max-width: 767.98px) {
+    .profile-page { padding-top: 18px; }
+    .profile-page .panel { border-radius: 17px; }
+    .profile-page .profile-banner { padding-top: 24px; }
+    .profile-page .security-card { padding: 16px; }
+  }
+</style>
 
-        <!-- Hiển thị mã QR của sinh viên -->
-        <h5 class="text-primary">Mã QR Đăng Nhập</h5>
-        <p class="text-muted small">
-          Sử dụng mã này để quét nhanh ở trang đăng nhập.
-        </p>
-        {% if profile.qr_code %}
-        <div class="mb-3">
-          <img
-            src="{{ profile.qr_code.url }}"
-            class="img-fluid border p-2 rounded"
-            style="max-width: 180px"
-            alt="QR Code"
-          />
+<div class="container profile-page">
+  <header class="page-heading">
+    <div class="eyebrow"><i class="bi bi-shield-check"></i> STU ONLINE EXAM</div>
+    <h1 class="page-title">Hồ sơ cá nhân</h1>
+    <p class="page-subtitle">Quản lý thông tin cá nhân và phương thức đăng nhập của bạn.</p>
+  </header>
+
+  {% if messages %}
+    <div class="message-stack mb-4">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'success' }} alert-dismissible fade show" role="alert">
+          <i class="bi bi-info-circle-fill me-2"></i>{{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
         </div>
-        <a
-          href="{{ profile.qr_code.url }}"
-          download="QR_{{ profile.student_id }}.png"
-          class="btn btn-outline-primary btn-sm"
-        >
-          <i class="bi bi-download"></i> Tải xuống mã QR
-        </a>
-        {% else %}
-        <p class="text-danger">Chưa có mã QR</p>
-        {% endif %}
-      </div>
+      {% endfor %}
     </div>
+  {% endif %}
 
-    <!-- Cột form cập nhật thông tin -->
-    <div class="col-md-8">
-      <div class="card shadow-sm p-4">
-        <h3 class="mb-4">
-          <i class="bi bi-person-gear"></i> Chỉnh sửa thông tin cá nhân
-        </h3>
-
-        {% if messages %} {% for message in messages %}
-        <div
-          class="alert alert-success alert-dismissible fade show"
-          role="alert"
-        >
-          {{ message }}
-          <button
-            type="button"
-            class="btn-close"
-            data-bs-dismiss="alert"
-            aria-label="Close"
-          ></button>
+  <div class="row g-4 align-items-stretch">
+    <aside class="col-lg-4">
+      <section class="panel">
+        <div class="profile-banner">
+          <div class="avatar-wrap">
+            <img src="{{ profile.avatar_display_url }}" class="avatar-img" alt="Ảnh đại diện của {{ profile.user.get_full_name|default:profile.user.username }}" />
+          </div>
+          <h2 class="profile-name">{{ profile.user.get_full_name|default:profile.user.username }}</h2>
+          <span class="profile-role"><i class="bi bi-person-badge"></i>{{ profile.get_role_display }}</span>
         </div>
-        {% endfor %} {% endif %}
 
-        <form method="post" enctype="multipart/form-data">
-          {% csrf_token %}
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Khoa</label>
-              <input
-                type="text"
-                class="form-control"
-                value="{{ profile.get_faculty_display }}"
-                disabled
-              />
+        <div class="identity-list">
+          <div class="identity-row">
+            <div class="identity-icon"><i class="bi bi-person-vcard"></i></div>
+            <div>
+              <div class="identity-label">Tên đăng nhập</div>
+              <div class="identity-value">{{ profile.user.username }}</div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label">Lớp</label>
-              <input
-                type="text"
-                class="form-control"
-                value="{{ profile.class_name }}"
-                disabled
-              />
+          </div>
+          {% if profile.role == "student" %}
+            <div class="identity-row">
+              <div class="identity-icon"><i class="bi bi-mortarboard"></i></div>
+              <div>
+                <div class="identity-label">Mã sinh viên</div>
+                <div class="identity-value">{{ profile.student_id|default:"Chưa cập nhật" }}</div>
+              </div>
+            </div>
+          {% elif profile.role == "lecturer" %}
+            <div class="identity-row">
+              <div class="identity-icon"><i class="bi bi-person-workspace"></i></div>
+              <div>
+                <div class="identity-label">Mã giảng viên</div>
+                <div class="identity-value">{{ profile.lecturer_id|default:"Chưa cập nhật" }}</div>
+              </div>
+            </div>
+          {% endif %}
+          <div class="identity-row">
+            <div class="identity-icon"><i class="bi bi-building"></i></div>
+            <div>
+              <div class="identity-label">Khoa</div>
+              <div class="identity-value">{{ profile.get_faculty_display|default:"Chưa cập nhật" }}</div>
+            </div>
+          </div>
+          <div class="identity-row">
+            <div class="identity-icon"><i class="bi bi-people"></i></div>
+            <div>
+              <div class="identity-label">Lớp</div>
+              <div class="identity-value">{{ profile.class_name|default:"Chưa cập nhật" }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <div class="col-lg-8">
+      <section class="panel">
+        <div class="panel-body">
+          <div class="d-flex align-items-start gap-3 mb-4">
+            <div class="section-icon"><i class="bi bi-person-gear"></i></div>
+            <div>
+              <h2 class="section-title">Thông tin cá nhân</h2>
+              <p class="section-description mb-0">Cập nhật thông tin liên hệ và ảnh đại diện của bạn.</p>
             </div>
           </div>
 
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Chuyên ngành</label>
-              <input
-                type="text"
-                class="form-control"
-                value="{{ profile.major }}"
-                disabled
-              />
+          <form method="post" enctype="multipart/form-data" id="profile-form">
+            {% csrf_token %}
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label" for="profile-faculty">Khoa</label>
+                <input id="profile-faculty" type="text" class="form-control" value="{{ profile.get_faculty_display|default:'Chưa cập nhật' }}" disabled />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="profile-class">Lớp</label>
+                <input id="profile-class" type="text" class="form-control" value="{{ profile.class_name|default:'Chưa cập nhật' }}" disabled />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="profile-major">Chuyên ngành</label>
+                <input id="profile-major" type="text" class="form-control" value="{{ profile.major|default:'Chưa cập nhật' }}" disabled />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="profile-study-year">Năm học</label>
+                <input id="profile-study-year" type="text" class="form-control" value="{% if profile.study_year %}Năm {{ profile.study_year }}{% else %}Chưa cập nhật{% endif %}" disabled />
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label">Năm học</label>
-              <input
-                type="text"
-                class="form-control"
-                value="Năm {{ profile.study_year }}"
-                disabled
-              />
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label" for="profile-phone">Số điện thoại</label>
+                <input id="profile-phone" type="tel" name="phone" class="form-control" value="{{ profile.phone|default_if_none:'' }}" autocomplete="tel" placeholder="Nhập số điện thoại" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="profile-birthday">Ngày sinh</label>
+                <input id="profile-birthday" type="date" name="birthday" class="form-control" value="{{ profile.birthday|date:'Y-m-d' }}" />
+              </div>
             </div>
-          </div>
 
-          <div class="row mb-3">
-            <div class="col-md-6">
-              <label class="form-label">Số điện thoại</label>
-              <input
-                type="text"
-                name="phone"
-                class="form-control"
-                value="{{ profile.phone }}"
-              />
+            <div class="mb-3">
+              <label class="form-label" for="profile-address">Địa chỉ</label>
+              <textarea id="profile-address" name="address" class="form-control" rows="3" placeholder="Nhập địa chỉ của bạn">{{ profile.address|default_if_none:'' }}</textarea>
             </div>
-            <div class="col-md-6">
-              <label class="form-label">Ngày sinh</label>
-              <input
-                type="date"
-                name="birthday"
-                class="form-control"
-                value="{{ profile.birthday|date:'Y-m-d' }}"
-              />
+
+            <div class="mb-4">
+              <label class="form-label" for="profile-avatar">Ảnh đại diện</label>
+              <input id="profile-avatar" type="file" name="avatar" class="form-control" accept="image/*" />
+              <div class="form-hint">Nên sử dụng ảnh rõ nét, định dạng JPG, PNG hoặc WEBP.</div>
             </div>
-          </div>
 
-          <div class="mb-3">
-            <label class="form-label">Địa chỉ</label>
-            <textarea name="address" class="form-control" rows="2">
-{{ profile.address }}</textarea
-            >
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Đổi ảnh đại diện (Avatar)</label>
-            <input type="file" name="avatar" class="form-control" />
-          </div>
-
-          <button type="submit" class="btn btn-success">
-            <i class="bi bi-save"></i> Lưu thay đổi
-          </button>
-        </form>
-      </div>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+              <span class="small-note"><i class="bi bi-lock me-1"></i>Thông tin tài khoản được quản lý trong hệ thống STU.</span>
+              <button type="submit" class="btn-stu"><i class="bi bi-check2-circle"></i>Lưu thay đổi</button>
+            </div>
+          </form>
+        </div>
+      </section>
     </div>
   </div>
+
+  <section class="panel security-panel">
+    <div class="panel-body">
+      <div class="d-flex align-items-start gap-3 mb-4">
+        <div class="section-icon"><i class="bi bi-shield-lock"></i></div>
+        <div>
+          <h2 class="section-title">Bảo mật & phương thức đăng nhập</h2>
+          <p class="section-description mb-0">Quản lý mã QR và đăng ký khuôn mặt để đăng nhập thuận tiện hơn.</p>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <div class="security-card text-center">
+            <div class="security-card-head text-start">
+              <div class="section-icon"><i class="bi bi-qr-code-scan"></i></div>
+              <div>
+                <h4>Mã QR đăng nhập</h4>
+                <p>Dùng mã QR này tại trang đăng nhập STU.</p>
+              </div>
+            </div>
+            {% if profile.qr_code %}
+              <div class="qr-frame">
+                <img src="{{ profile.qr_code.url }}" class="qr-image" alt="Mã QR đăng nhập của tài khoản" loading="lazy" />
+              </div>
+              <a href="{{ profile.qr_code.url }}" download="QR_{{ profile.student_id|default:profile.lecturer_id|default:profile.user.username }}.png" class="btn-outline-stu">
+                <i class="bi bi-download"></i>Tải mã QR
+              </a>
+            {% else %}
+              <div class="qr-frame text-muted"><div><i class="bi bi-qr-code" style="font-size:2rem"></i><p class="mb-0 mt-2">Tài khoản chưa có mã QR.</p></div></div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="col-lg-7">
+          <div class="security-card">
+            <div class="security-card-head">
+              <div class="section-icon"><i class="bi bi-person-bounding-box"></i></div>
+              <div class="flex-grow-1">
+                <h4>Đăng nhập bằng khuôn mặt</h4>
+                <p>Đăng ký khuôn mặt của chính bạn để sử dụng phương thức đăng nhập này.</p>
+              </div>
+              {% if face_profile %}
+                <span class="status-pill status-success"><i class="bi bi-check-circle-fill"></i>Đã đăng ký</span>
+              {% else %}
+                <span class="status-pill status-pending"><i class="bi bi-clock"></i>Chưa đăng ký</span>
+              {% endif %}
+            </div>
+
+            {% if face_profile %}
+              <div class="alert alert-success d-flex gap-2 align-items-start mt-3 mb-3" role="status">
+                <i class="bi bi-shield-check fs-5"></i>
+                <div><strong>Khuôn mặt đã được đăng ký.</strong><div class="small mt-1">Bạn có thể chọn đăng nhập bằng khuôn mặt tại trang đăng nhập.</div></div>
+              </div>
+              <p class="small-note mb-0"><i class="bi bi-info-circle me-1"></i>Để bảo vệ tài khoản, không sử dụng ảnh khuôn mặt của người khác khi đăng ký.</p>
+            {% else %}
+              <p class="small-note mb-3">Để có kết quả nhận diện tốt, hãy ngồi ở nơi đủ sáng, nhìn thẳng vào camera và chỉ để một khuôn mặt trong khung hình.</p>
+
+              <div class="face-video-wrap mb-3">
+                <video id="face-camera" autoplay playsinline muted style="display:none;"></video>
+                <div id="face-camera-placeholder" class="face-camera-placeholder">
+                  <div><i class="bi bi-camera-video"></i><strong>Camera chưa được bật</strong><div class="small mt-1">Nhấn “Bật webcam” để bắt đầu đăng ký.</div></div>
+                </div>
+              </div>
+              <canvas id="face-canvas" style="display:none;"></canvas>
+
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="face-consent" />
+                <label class="form-check-label" for="face-consent">Tôi đồng ý đăng ký và xử lý dữ liệu khuôn mặt để phục vụ chức năng đăng nhập trong hệ thống STU Online Exam.</label>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" id="face-start-camera" class="btn-outline-stu"><i class="bi bi-camera-video"></i>Bật webcam</button>
+                <button type="button" id="face-register" class="btn-stu" disabled><i class="bi bi-person-check"></i>Chụp và đăng ký</button>
+                <button type="button" id="face-stop-camera" class="btn-outline-stu" disabled><i class="bi bi-camera-video-off"></i>Tắt webcam</button>
+              </div>
+
+              <div id="face-message" class="alert mt-3 mb-0" style="display:none;" role="status" aria-live="polite"></div>
+              <p class="small-note mt-3 mb-0"><i class="bi bi-lock me-1"></i>Chỉ gửi ảnh chụp để xử lý đăng ký. Giao diện này không lưu ảnh webcam vào hồ sơ trình duyệt.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
+
+{% if not face_profile %}
+<script>
+(() => {
+  "use strict";
+
+  const video = document.getElementById("face-camera");
+  const canvas = document.getElementById("face-canvas");
+  const placeholder = document.getElementById("face-camera-placeholder");
+  const consent = document.getElementById("face-consent");
+  const startButton = document.getElementById("face-start-camera");
+  const registerButton = document.getElementById("face-register");
+  const stopButton = document.getElementById("face-stop-camera");
+  const message = document.getElementById("face-message");
+
+  if (!video || !canvas || !consent || !startButton || !registerButton || !stopButton || !message) return;
+
+  let cameraStream = null;
+  let submitting = false;
+
+  function showMessage(text, type = "danger") {
+    message.textContent = text;
+    message.className = `alert alert-${type} mt-3 mb-0`;
+    message.style.display = "block";
+  }
+
+  function updateRegisterButton() {
+    registerButton.disabled = !(consent.checked && cameraStream && !submitting);
+  }
+
+  function stopCamera() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      cameraStream = null;
+    }
+    video.srcObject = null;
+    video.style.display = "none";
+    if (placeholder) placeholder.style.display = "grid";
+    startButton.disabled = false;
+    stopButton.disabled = true;
+    updateRegisterButton();
+  }
+
+  startButton.addEventListener("click", async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showMessage("Trình duyệt không hỗ trợ webcam. Hãy mở trang bằng localhost/HTTPS và kiểm tra trình duyệt.");
+      return;
+    }
+
+    startButton.disabled = true;
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false
+      });
+      video.srcObject = cameraStream;
+      video.style.display = "block";
+      if (placeholder) placeholder.style.display = "none";
+      await video.play();
+      stopButton.disabled = false;
+      updateRegisterButton();
+      showMessage("Webcam đã bật. Hãy nhìn thẳng vào camera và bảo đảm khuôn mặt được chiếu sáng rõ.", "info");
+    } catch (error) {
+      stopCamera();
+      showMessage("Không thể mở webcam. Hãy cấp quyền camera cho trình duyệt và đóng ứng dụng khác đang sử dụng camera.");
+    }
+  });
+
+  consent.addEventListener("change", updateRegisterButton);
+  stopButton.addEventListener("click", stopCamera);
+
+  registerButton.addEventListener("click", async () => {
+    if (!consent.checked || !cameraStream || submitting) return;
+    if (!video.videoWidth || !video.videoHeight) {
+      showMessage("Camera chưa sẵn sàng. Vui lòng đợi một chút rồi thử lại.");
+      return;
+    }
+
+    const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+    if (!csrfToken) {
+      showMessage("Không tìm thấy CSRF token. Hãy tải lại trang rồi thử lại.");
+      return;
+    }
+
+    submitting = true;
+    updateRegisterButton();
+    try {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Không thể xử lý ảnh từ camera.");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const image = canvas.toDataURL("image/jpeg", 0.9);
+
+      const response = await fetch("{% url 'register_face' %}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({ consent: true, image })
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok || !result.success) {
+        showMessage(result.message || "Đăng ký khuôn mặt thất bại. Vui lòng thử lại.");
+        return;
+      }
+
+      showMessage(result.message || "Đăng ký khuôn mặt thành công.", "success");
+      stopCamera();
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      showMessage("Không thể gửi ảnh lên máy chủ. Vui lòng kiểm tra kết nối rồi thử lại.");
+    } finally {
+      submitting = false;
+      updateRegisterButton();
+    }
+  });
+
+  window.addEventListener("beforeunload", stopCamera);
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -1,8 +1,103 @@
+
 {% extends "base.html" %} {% load static %} {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/exam_vscode.css' %}?v=20261001" />
+<style>
+  .proctor-video-wrapper { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; background: #111827; }
+  .proctor-video-wrapper .proctor-video { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .proctor-landmark-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; transform: scaleX(-1); }
+  .proctor-ai-status { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; font-weight: 600; }
+  .proctor-ai-dot { width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex: 0 0 auto; }
+  .proctor-ai-status[data-state="loading"] .proctor-ai-dot { background: #f59e0b; }
+  .proctor-ai-status[data-state="ready"] .proctor-ai-dot, .proctor-ai-status[data-state="face"] .proctor-ai-dot { background: #10b981; }
+  .proctor-ai-status[data-state="no-face"] .proctor-ai-dot, .proctor-ai-status[data-state="error"] .proctor-ai-dot { background: #ef4444; }
+  .proctor-landmark-info { margin-top: 6px; font-size: 11px; color: #6b7280; line-height: 1.4; }
+  .proctor-pose-panel { margin-top: 8px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
+  .proctor-pose-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .proctor-pose-item { min-width: 0; }
+  .proctor-pose-label { display: block; font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+  .proctor-pose-value { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: #374151; white-space: nowrap; }
+  .proctor-pose-direction { margin-top: 6px; font-size: 11px; font-weight: 600; color: #059669; }
+  .proctor-pose-direction[data-state="warning"] { color: #d97706; }
+  .proctor-pose-direction[data-state="no-face"] { color: #dc2626; }
+  .proctor-warning {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid #fcd34d;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 11px;
+    line-height: 1.45;
+    font-weight: 600;
+  }
+  .proctor-warning[data-state="danger"] {
+    border-color: #fca5a5;
+    background: #fef2f2;
+    color: #991b1b;
+  }
+  .proctor-warning[data-state="success"] {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .screen-share-panel { margin-top: 10px; padding: 10px; border: 1px solid #dbeafe; border-radius: 10px; background: #eff6ff; }
+  .screen-share-title { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #1e40af; }
+  .screen-share-actions { display: flex; gap: 7px; margin-top: 9px; }
+  .screen-share-button { flex: 1; border: 0; border-radius: 8px; padding: 9px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
+  #start-screen-sharing { background: #2563eb; color: #fff; }
+  #stop-screen-sharing { background: #e5e7eb; color: #374151; }
+  .screen-share-button:disabled { cursor: not-allowed; opacity: .55; }
+  .screen-share-status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: #4b5563; }
+  .screen-share-status[data-state="active"] { color: #047857; font-weight: 700; }
+  .screen-share-status[data-state="warning"], .screen-share-status[data-state="error"] { color: #b91c1c; font-weight: 700; }
+
+</style>
 {% endblock %} {% block body_block %}
 
 <div class="exam-page">
+
+  <!-- =========================================================
+       PROCTORING LOCK OVERLAY
+       BƯỚC 3: Hiển thị khi StudentExam.is_locked = True
+       ========================================================= -->
+  <div
+    id="examLockOverlay"
+    class="exam-lock-overlay"
+    {% if not student_exam.is_locked %}hidden{% endif %}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="examLockTitle"
+  >
+    <div class="exam-lock-modal">
+      <div class="exam-lock-icon" aria-hidden="true">
+        <i class="bi bi-lock-fill"></i>
+      </div>
+
+      <h2 id="examLockTitle">Bài thi đang tạm dừng</h2>
+
+      <p class="exam-lock-message">
+        Hệ thống đã ghi nhận
+        <strong id="lockWarningCount">{{ student_exam.warning_count }}</strong>
+        lần cảnh báo.
+      </p>
+
+      <p class="exam-lock-description">
+        Bài thi của bạn đang được giảng viên kiểm tra.
+        Vui lòng chờ giảng viên xử lý.
+      </p>
+
+      <div class="exam-lock-status">
+        <span class="exam-lock-status-dot"></span>
+        <span>Đang chờ giảng viên</span>
+      </div>
+
+      <div class="exam-lock-note">
+        Các câu trả lời đã lưu của bạn vẫn được giữ nguyên.
+      </div>
+    </div>
+  </div>
+
   <!-- =========================================================
        TOP EXAM BAR
        ========================================================= -->
@@ -600,21 +695,28 @@
           </div>
         </div>
 
-        <!-- Proctor -->
-        {% if proctoring_enabled %}
-
+        <!-- Proctor / Webcam - STEP 5 -->
         <div class="sidebar-card proctor-card">
           <div class="sidebar-card-title">
             <i class="bi bi-camera-video-fill"></i>
-            Giám sát AI
+            Giám sát
           </div>
 
-          <video
-            id="proctor-video"
-            class="proctor-video"
-            muted
-            playsinline
-          ></video>
+          <div class="proctor-video-wrapper">
+            <video
+              id="proctor-video"
+              class="proctor-video"
+              muted
+              autoplay
+              playsinline
+            ></video>
+
+            <canvas
+              id="proctor-landmark-canvas"
+              class="proctor-landmark-canvas"
+              aria-hidden="true"
+            ></canvas>
+          </div>
 
           <button type="button" id="start-proctoring" class="btn-proctor">
             <i class="bi bi-camera-video"></i>
@@ -625,24 +727,65 @@
             Camera chưa được bật.
           </p>
 
+          <div id="proctor-ai-status" class="proctor-ai-status" data-state="idle">
+            <span class="proctor-ai-dot"></span>
+            <span id="proctor-ai-status-text">AI chưa khởi động.</span>
+          </div>
+
+          <div id="proctor-landmark-info" class="proctor-landmark-info">
+            Bước 9: AI giám sát tư thế và trạng thái tab thi. Rời tab từ 1 giây trở lên sẽ được ghi nhận.
+          </div>
+
+          <div class="proctor-pose-panel" aria-live="polite">
+            <div class="proctor-pose-grid">
+              <div class="proctor-pose-item">
+                <span class="proctor-pose-label">Yaw</span>
+                <span id="proctor-pose-yaw" class="proctor-pose-value">--°</span>
+              </div>
+              <div class="proctor-pose-item">
+                <span class="proctor-pose-label">Pitch</span>
+                <span id="proctor-pose-pitch" class="proctor-pose-value">--°</span>
+              </div>
+              <div class="proctor-pose-item">
+                <span class="proctor-pose-label">Roll</span>
+                <span id="proctor-pose-roll" class="proctor-pose-value">--°</span>
+              </div>
+            </div>
+            <div id="proctor-pose-direction" class="proctor-pose-direction" data-state="idle">
+              Head pose: đang chờ khuôn mặt.
+            </div>
+          </div>
+
           <div id="proctor-warning" class="proctor-warning" hidden></div>
-        </div>
 
-        {% else %}
-
-        <div class="sidebar-card proctor-disabled">
-          <div class="proctor-disabled-icon">
-            <i class="bi bi-camera-video-off"></i>
+          <div
+            id="tab-monitor-status"
+            class="proctor-warning"
+            data-state="idle"
+            aria-live="polite"
+          >
+            Trạng thái trình duyệt: đang giám sát tab thi.
           </div>
 
-          <div>
-            <strong> Giám sát AI </strong>
-
-            <p>Chưa cấu hình. Bài thi vẫn hoạt động bình thường.</p>
+          <!-- STEP 13 - SCREEN SHARING -->
+          <div class="screen-share-panel">
+            <div class="screen-share-title">
+              <i class="bi bi-display"></i>
+              Chia sẻ màn hình khi thi
+            </div>
+            <div class="screen-share-actions">
+              <button type="button" id="start-screen-sharing" class="screen-share-button">
+                <i class="bi bi-display"></i> Chia sẻ màn hình
+              </button>
+              <button type="button" id="stop-screen-sharing" class="screen-share-button" disabled>
+                <i class="bi bi-stop-circle"></i> Dừng chia sẻ
+              </button>
+            </div>
+            <p id="screen-share-status" class="screen-share-status" data-state="idle" aria-live="polite">
+              Chưa bắt đầu chia sẻ màn hình. Nhấn nút và chọn màn hình/cửa sổ trong hộp thoại của trình duyệt.
+            </p>
           </div>
         </div>
-
-        {% endif %}
       </div>
     </aside>
   </div>
@@ -664,6 +807,60 @@
       document.querySelector(
           '[name="csrfmiddlewaretoken"]'
       ).value;
+
+
+  /* =========================================================
+     PROCTORING LOCK STATE - BƯỚC 3
+     ========================================================= */
+
+  let examIsLocked = {{ student_exam.is_locked|yesno:"true,false" }};
+  let examWarningCount = Number("{{ student_exam.warning_count }}") || 0;
+
+  const examLockOverlay =
+      document.getElementById("examLockOverlay");
+
+  const lockWarningCount =
+      document.getElementById("lockWarningCount");
+
+
+  function setExamLocked(locked, warningCount = examWarningCount) {
+
+      examIsLocked = Boolean(locked);
+      examWarningCount = Number(warningCount) || 0;
+
+      if (lockWarningCount) {
+          lockWarningCount.textContent = examWarningCount;
+      }
+
+      if (examLockOverlay) {
+          examLockOverlay.hidden = !examIsLocked;
+      }
+
+      document.body.classList.toggle(
+          "exam-is-locked",
+          examIsLocked
+      );
+
+      if (examIsLocked) {
+          stopFaceLandmarkerLoop();
+          stopScreenSharing({ notifyBackend: true, stateMessage: "Bài thi bị khóa. Đã dừng chia sẻ màn hình." });
+      } else {
+          // Khi giảng viên mở khóa, cập nhật lại nút chia sẻ theo trạng thái mới.
+          // Luồng chia sẻ cũ đã bị dừng khi khóa, nên sinh viên cần chủ động bấm
+          // nút để trình duyệt hỏi quyền chia sẻ màn hình lại.
+          if (typeof updateScreenShareButtons === "function") {
+              updateScreenShareButtons(Boolean(screenShareActive));
+          }
+          if (proctorStream && faceLandmarkerInitialized) {
+              startFaceLandmarkerLoop();
+          }
+      }
+  }
+
+
+  function isExamLocked() {
+      return examIsLocked;
+  }
 
 
   /* =========================================================
@@ -988,6 +1185,18 @@
           });
 
   }
+
+
+  examForm.addEventListener(
+      "submit",
+      function(event) {
+          if (isExamLocked()) {
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+          }
+      }
+  );
 
 
   examForm.addEventListener(
@@ -1845,6 +2054,10 @@
       questionIndex
   ) {
 
+      if (isExamLocked()) {
+          return;
+      }
+
       const editor =
           document.getElementById(
               `code-${questionIndex}`
@@ -2136,6 +2349,10 @@
 
   async function saveExamDraft() {
 
+      if (isExamLocked()) {
+          return;
+      }
+
       if (
           !examForm ||
           examForm.dataset.saving === "true"
@@ -2266,6 +2483,10 @@
 
   function handleBeforeSubmit() {
 
+      if (isExamLocked()) {
+          return false;
+      }
+
       document
           .querySelectorAll(
               ".drag-code-area"
@@ -2296,234 +2517,1332 @@
 
 
   /* =========================================================
-     PROCTORING
+     STEP 7 - MEDIAPIPE FACE LANDMARKER + HEAD POSE
      ========================================================= */
 
-  {% if proctoring_enabled %}
+  const proctorVideo = document.getElementById("proctor-video");
+  const proctorLandmarkCanvas = document.getElementById("proctor-landmark-canvas");
+  const proctorLandmarkContext = proctorLandmarkCanvas ? proctorLandmarkCanvas.getContext("2d") : null;
+  const proctorStatus = document.getElementById("proctor-status");
+  const proctorAiStatus = document.getElementById("proctor-ai-status");
+  const proctorAiStatusText = document.getElementById("proctor-ai-status-text");
+  const proctorLandmarkInfo = document.getElementById("proctor-landmark-info");
+  const proctorPoseYaw = document.getElementById("proctor-pose-yaw");
+  const proctorPosePitch = document.getElementById("proctor-pose-pitch");
+  const proctorPoseRoll = document.getElementById("proctor-pose-roll");
+  const proctorPoseDirection = document.getElementById("proctor-pose-direction");
+  const startProctoring = document.getElementById("start-proctoring");
+  const proctorWarning = document.getElementById("proctor-warning");
+  const reportProctorViolationUrl = "{% url 'report_proctor_violation' student_exam.id %}";
 
-  const proctorVideo =
-      document.getElementById(
-          "proctor-video"
-      );
+  const WARNING_HOLD_MS = 2000;
+  const WARNING_RETRY_COOLDOWN_MS = 5000;
 
-  const proctorStatus =
-      document.getElementById(
-          "proctor-status"
-      );
+  // =========================================================
+  // STEP 9 - BROWSER / TAB PROCTORING
+  // =========================================================
+  // Chỉ dùng visibilitychange để tránh false-positive do
+  // chuột ra ngoài cửa sổ hoặc focus thay đổi rất ngắn.
+  // Chuyển sang tab khác >= 1 giây mới được ghi nhận.
+  const TAB_SWITCH_MIN_DURATION_MS = 1000;
+  const TAB_SWITCH_RETRY_COOLDOWN_MS = 5000;
 
-  const proctorWarning =
-      document.getElementById(
-          "proctor-warning"
-      );
+  const tabMonitorStatus =
+      document.getElementById("tab-monitor-status");
 
-  const startProctoring =
-      document.getElementById(
-          "start-proctoring"
-      );
+  // STEP 10 - EVIDENCE CAPTURE
+  // Chỉ chụp 1 frame webcam khi server ghi nhận một vi phạm.
+  // Không stream/ghi hình liên tục và không gửi frame định kỳ.
+  let evidenceCaptureCanvas = null;
 
-  let proctorStream = null;
-  let proctorInterval = null;
-
-
-  startProctoring.addEventListener(
-      "click",
-      async function() {
-
-          try {
-
-              proctorStream =
-                  await navigator
-                      .mediaDevices
-                      .getUserMedia({
-                          video: {
-                              width: {
-                                  ideal: 320
-                              },
-
-                              height: {
-                                  ideal: 240
-                              }
-                          },
-
-                          audio: false
-                      });
-
-
-              proctorVideo.srcObject =
-                  proctorStream;
-
-              await proctorVideo.play();
-
-
-              startProctoring.disabled =
-                  true;
-
-              proctorStatus.textContent =
-                  "Camera đang hoạt động.";
-
-
-              proctorInterval =
-                  setInterval(
-                      sendProctorFrame,
-                      5000
-                  );
-
-          }
-
-          catch (error) {
-
-              proctorStatus.textContent =
-                  "Không thể bật webcam.";
-
-          }
-
+  function captureProctorEvidence() {
+      if (!proctorVideo ||
+          !proctorVideo.videoWidth ||
+          !proctorVideo.videoHeight) {
+          return Promise.resolve(null);
       }
-  );
 
+      if (!evidenceCaptureCanvas) {
+          evidenceCaptureCanvas = document.createElement("canvas");
+      }
 
-  async function sendProctorFrame() {
+      const width = 640;
+      const ratio =
+          proctorVideo.videoHeight / proctorVideo.videoWidth;
+      const height = Math.max(1, Math.round(width * ratio));
 
-      if (!proctorVideo.videoWidth) {
+      evidenceCaptureCanvas.width = width;
+      evidenceCaptureCanvas.height = height;
+
+      const context = evidenceCaptureCanvas.getContext("2d");
+      if (!context) {
+          return Promise.resolve(null);
+      }
+
+      context.drawImage(
+          proctorVideo,
+          0,
+          0,
+          width,
+          height
+      );
+
+      return new Promise(resolve => {
+          evidenceCaptureCanvas.toBlob(
+              blob => resolve(blob),
+              "image/jpeg",
+              0.72
+          );
+      });
+  }
+
+  function buildViolationFormData(gesture, durationSeconds, evidenceBlob) {
+      const payload = new FormData();
+      payload.append("gesture", gesture);
+      payload.append(
+          "duration_seconds",
+          String(durationSeconds)
+      );
+
+      if (evidenceBlob) {
+          payload.append(
+              "evidence",
+              evidenceBlob,
+              `proctor_${gesture}_${Date.now()}.jpg`
+          );
+      }
+
+      return payload;
+  }
+
+  let tabHiddenStartedAt = 0;
+  let tabViolationReportInFlight = false;
+  let lastTabViolationReportAt = 0;
+
+  function setTabMonitorStatus(message, state = "idle") {
+      if (!tabMonitorStatus) return;
+
+      tabMonitorStatus.textContent = message;
+      tabMonitorStatus.dataset.state = state;
+  }
+
+  async function reportTabSwitch(durationMs) {
+      if (isExamLocked()) return;
+      if (tabViolationReportInFlight) return;
+
+      const now = Date.now();
+
+      if (
+          now - lastTabViolationReportAt <
+          TAB_SWITCH_RETRY_COOLDOWN_MS
+      ) {
           return;
       }
 
-
-      const canvas =
-          document.createElement(
-              "canvas"
-          );
-
-
-      canvas.width = 320;
-
-      canvas.height =
-          Math.round(
-              320 *
-              proctorVideo.videoHeight /
-              proctorVideo.videoWidth
-          );
-
-
-      canvas
-          .getContext("2d")
-          .drawImage(
-              proctorVideo,
-              0,
-              0,
-              canvas.width,
-              canvas.height
-          );
-
-
-      const frame =
-          await new Promise(
-              resolve =>
-                  canvas.toBlob(
-                      resolve,
-                      "image/jpeg",
-                      0.65
-                  )
-          );
-
-
-      if (!frame) return;
-
-
-      const payload =
-          new FormData();
-
-
-      payload.append(
-          "frame",
-          frame,
-          "proctor-frame.jpg"
+      const durationSeconds = Math.max(
+          1,
+          Math.round(durationMs / 1000)
       );
 
+      tabViolationReportInFlight = true;
+      lastTabViolationReportAt = now;
 
       try {
+          const evidenceBlob =
+              await captureProctorEvidence();
 
-          const response =
-              await fetch(
-                  "{% url 'proctor_exam_frame' student_exam.id %}",
-                  {
-                      method: "POST",
-
-                      headers: {
-                          "X-CSRFToken":
-                              csrfToken
-                      },
-
-                      body: payload
-                  }
-              );
-
-
-          const result =
-              await response.json();
-
-
-          if (result.warning_created) {
-
-              proctorWarning.hidden =
-                  false;
-
-              proctorWarning.textContent =
-                  `Cảnh báo ${result.warning_count}/3`;
-
-          }
-
-
-          if (result.terminated) {
-
-              clearInterval(
-                  proctorInterval
-              );
-
-              proctorStream
-                  .getTracks()
-                  .forEach(
-                      track =>
-                          track.stop()
-                  );
-
-
-              window.location.assign(
-                  result.redirect_url
-              );
-
-          }
-
-      }
-
-      catch (error) {
-
-          proctorStatus.textContent =
-              "Mất kết nối dịch vụ giám sát.";
-
-      }
-
-  }
-
-
-  window.addEventListener(
-      "pagehide",
-      function() {
-
-          clearInterval(
-              proctorInterval
+          const response = await fetch(
+              reportProctorViolationUrl,
+              {
+                  method: "POST",
+                  headers: {
+                      "X-CSRFToken": csrfToken
+                  },
+                  body: buildViolationFormData(
+                      "tab_switch",
+                      durationSeconds,
+                      evidenceBlob
+                  )
+              }
           );
 
-          proctorStream
-              ?.getTracks()
-              .forEach(
-                  track =>
-                      track.stop()
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+              if (result.code === "exam_locked") {
+                  setExamLocked(
+                      true,
+                      result.warning_count
+                  );
+                  setTabMonitorStatus(
+                      "Bài thi đã bị khóa.",
+                      "danger"
+                  );
+                  return;
+              }
+
+              throw new Error(
+                  result.message ||
+                  "Không thể ghi nhận chuyển tab."
+              );
+          }
+
+          if (result.locked) {
+              setTabMonitorStatus(
+                  `Chuyển tab: cảnh báo ${result.warning_count}/3. Bài thi đã bị khóa.`,
+                  "danger"
               );
 
-      }
-  );
+              setProctorWarning(
+                  `Cảnh báo ${result.warning_count}/3: Phát hiện rời tab thi. Bài thi đang được tạm khóa để giảng viên kiểm tra.`,
+                  "danger"
+              );
 
-  {% endif %}
+              setExamLocked(
+                  true,
+                  result.warning_count
+              );
+
+              return;
+          }
+
+          setTabMonitorStatus(
+              `Đã ghi nhận rời tab: cảnh báo ${result.warning_count}/3.`,
+              result.warning_count >= 2
+                  ? "danger"
+                  : "warning"
+          );
+
+          setProctorWarning(
+              `Cảnh báo ${result.warning_count}/3: Phát hiện bạn rời khỏi tab thi.`,
+              result.warning_count >= 2
+                  ? "danger"
+                  : "warning"
+          );
+
+      } catch (error) {
+          console.error(
+              "[Step 9] Tab switch report error:",
+              error
+          );
+
+          setTabMonitorStatus(
+              "Không thể đồng bộ cảnh báo chuyển tab.",
+              "danger"
+          );
+
+      } finally {
+          tabViolationReportInFlight = false;
+      }
+  }
+
+  function handleExamVisibilityChange() {
+      if (isExamLocked()) {
+          return;
+      }
+
+      if (document.visibilityState === "hidden") {
+          tabHiddenStartedAt = Date.now();
+
+          setTabMonitorStatus(
+              "Phát hiện tab thi đang bị ẩn. Đang kiểm tra...",
+              "warning"
+          );
+
+          return;
+      }
+
+      if (
+          document.visibilityState === "visible" &&
+          tabHiddenStartedAt
+      ) {
+          const hiddenDurationMs =
+              Date.now() - tabHiddenStartedAt;
+
+          tabHiddenStartedAt = 0;
+
+          if (
+              hiddenDurationMs >=
+              TAB_SWITCH_MIN_DURATION_MS
+          ) {
+              reportTabSwitch(
+                  hiddenDurationMs
+              );
+          } else {
+              setTabMonitorStatus(
+                  "Trạng thái trình duyệt: đang giám sát tab thi.",
+                  "idle"
+              );
+          }
+      }
+  }
+
+  document.addEventListener(
+      "visibilitychange",
+      handleExamVisibilityChange
+  );
+  let activeViolationGesture = "";
+  let activeViolationStartedAt = 0;
+  let activeViolationReported = false;
+  let violationReportInFlight = false;
+  let lastViolationReportAttemptAt = 0;
+
+  let proctorStream = null;
+  let faceLandmarker = null;
+  let faceLandmarkerAnimationFrame = null;
+  let faceLandmarkerLastVideoTime = -1;
+  let faceLandmarkerLastDetectionTime = 0;
+  let faceLandmarkerInitialized = false;
+  let faceLandmarkerInitializing = false;
+
+  const MEDIAPIPE_VISION_VERSION = "1.0.1";
+  const MEDIAPIPE_VISION_CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VISION_VERSION}/vision_bundle.mjs`;
+  const MEDIAPIPE_WASM_PATH = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VISION_VERSION}/wasm`;
+  const FACE_LANDMARKER_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+  // Các index landmark ổn định của Face Mesh/Face Landmarker.
+  const FACE_POSE_LANDMARKS = {
+      nose: 1,
+      forehead: 10,
+      leftEyeOuter: 33,
+      rightEyeOuter: 263,
+      leftEyeInner: 133,
+      rightEyeInner: 362,
+      mouthLeft: 61,
+      mouthRight: 291,
+      chin: 152
+  };
+
+  // Bước 8: pose bất thường được giữ liên tục rồi mới gửi cảnh báo lên server.
+  const HEAD_POSE_THRESHOLDS = {
+      yaw: 18,
+      pitch: 15,
+      roll: 15
+  };
+
+  function setProctorStatus(message, state = "") {
+      if (!proctorStatus) return;
+      proctorStatus.textContent = message;
+      proctorStatus.dataset.state = state;
+  }
+
+  function setProctorAiStatus(message, state = "idle") {
+      if (proctorAiStatus) proctorAiStatus.dataset.state = state;
+      if (proctorAiStatusText) proctorAiStatusText.textContent = message;
+  }
+
+  function setProctorLandmarkInfo(message) {
+      if (proctorLandmarkInfo) proctorLandmarkInfo.textContent = message;
+  }
+
+  function setPoseValues(yaw = null, pitch = null, roll = null) {
+      if (proctorPoseYaw) proctorPoseYaw.textContent = yaw === null ? "--°" : `${yaw.toFixed(1)}°`;
+      if (proctorPosePitch) proctorPosePitch.textContent = pitch === null ? "--°" : `${pitch.toFixed(1)}°`;
+      if (proctorPoseRoll) proctorPoseRoll.textContent = roll === null ? "--°" : `${roll.toFixed(1)}°`;
+  }
+
+  function setPoseDirection(message, state = "idle") {
+      if (!proctorPoseDirection) return;
+      proctorPoseDirection.textContent = message;
+      proctorPoseDirection.dataset.state = state;
+  }
+
+  function resizeProctorLandmarkCanvas() {
+      if (!proctorVideo || !proctorLandmarkCanvas) return;
+      const width = proctorVideo.videoWidth;
+      const height = proctorVideo.videoHeight;
+      if (!width || !height) return;
+      if (proctorLandmarkCanvas.width !== width || proctorLandmarkCanvas.height !== height) {
+          proctorLandmarkCanvas.width = width;
+          proctorLandmarkCanvas.height = height;
+      }
+  }
+
+  function clearProctorLandmarks() {
+      if (!proctorLandmarkContext || !proctorLandmarkCanvas) return;
+      proctorLandmarkContext.clearRect(0, 0, proctorLandmarkCanvas.width, proctorLandmarkCanvas.height);
+  }
+
+  function drawFaceLandmarks(result) {
+      if (!proctorLandmarkContext || !proctorLandmarkCanvas) return;
+      clearProctorLandmarks();
+      const faces = result?.faceLandmarks || [];
+      for (const landmarks of faces) {
+          for (const landmark of landmarks) {
+              const x = landmark.x * proctorLandmarkCanvas.width;
+              const y = landmark.y * proctorLandmarkCanvas.height;
+              proctorLandmarkContext.beginPath();
+              proctorLandmarkContext.arc(x, y, 1.35, 0, Math.PI * 2);
+              proctorLandmarkContext.fillStyle = "rgba(16, 185, 129, 0.85)";
+              proctorLandmarkContext.fill();
+          }
+      }
+  }
+
+  function getLandmark(landmarks, index) {
+      const point = landmarks?.[index];
+      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+      return point;
+  }
+
+  function distance2D(a, b) {
+      return Math.hypot(b.x - a.x, b.y - a.y);
+  }
+
+  function midpoint(a, b) {
+      return {
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2
+      };
+  }
+
+  /**
+   * Ước tính head pose từ hình học landmark.
+   * Đây là pose estimation ở mức prototype, chưa phải camera-calibrated 3D solvePnP.
+   * - Yaw: độ lệch ngang của mũi so với tâm hai mắt.
+   * - Pitch: vị trí dọc của mũi trên trục mắt -> cằm.
+   * - Roll: góc của đường nối hai mắt.
+   */
+  function estimateHeadPose(landmarks) {
+      const nose = getLandmark(landmarks, FACE_POSE_LANDMARKS.nose);
+      const forehead = getLandmark(landmarks, FACE_POSE_LANDMARKS.forehead);
+      const leftEyeOuter = getLandmark(landmarks, FACE_POSE_LANDMARKS.leftEyeOuter);
+      const rightEyeOuter = getLandmark(landmarks, FACE_POSE_LANDMARKS.rightEyeOuter);
+      const leftEyeInner = getLandmark(landmarks, FACE_POSE_LANDMARKS.leftEyeInner);
+      const rightEyeInner = getLandmark(landmarks, FACE_POSE_LANDMARKS.rightEyeInner);
+      const chin = getLandmark(landmarks, FACE_POSE_LANDMARKS.chin);
+      const mouthLeft = getLandmark(landmarks, FACE_POSE_LANDMARKS.mouthLeft);
+      const mouthRight = getLandmark(landmarks, FACE_POSE_LANDMARKS.mouthRight);
+
+      if (!nose || !leftEyeOuter || !rightEyeOuter || !leftEyeInner || !rightEyeInner || !chin || !forehead) {
+          return null;
+      }
+
+      const leftEyeCenter = midpoint(leftEyeOuter, leftEyeInner);
+      const rightEyeCenter = midpoint(rightEyeOuter, rightEyeInner);
+      const eyeCenter = midpoint(leftEyeCenter, rightEyeCenter);
+      const eyeDistance = distance2D(leftEyeCenter, rightEyeCenter);
+      if (!eyeDistance || eyeDistance < 0.01) return null;
+
+      // Roll: trong hệ tọa độ ảnh, y tăng xuống dưới.
+      const roll = Math.atan2(
+          rightEyeCenter.y - leftEyeCenter.y,
+          rightEyeCenter.x - leftEyeCenter.x
+      ) * 180 / Math.PI;
+
+      // Yaw: chuẩn hóa độ lệch ngang của mũi theo khoảng cách hai mắt.
+      // Hệ số 45 chỉ là phép ánh xạ hình học để hiển thị góc xấp xỉ.
+      const yawOffset = (nose.x - eyeCenter.x) / eyeDistance;
+      const yaw = Math.max(-45, Math.min(45, yawOffset * 45));
+
+      // Pitch: chuẩn hóa vị trí mũi trên trục từ đường mắt tới cằm.
+      // Mốc trung tính xấp xỉ được lấy từ tỷ lệ hình học khuôn mặt.
+      const faceHeight = Math.max(chin.y - eyeCenter.y, 0.01);
+      const noseRatio = (nose.y - eyeCenter.y) / faceHeight;
+      const neutralNoseRatio = 0.42;
+      const pitch = Math.max(-40, Math.min(40, (neutralNoseRatio - noseRatio) * 70));
+
+      // Dùng thêm trán/mouth để loại các trường hợp landmark bị méo quá mạnh.
+      const mouthCenter = (mouthLeft && mouthRight) ? midpoint(mouthLeft, mouthRight) : null;
+      const verticalFaceSpan = Math.abs(chin.y - forehead.y);
+      const stableGeometry = verticalFaceSpan > 0.05 && eyeDistance > 0.03;
+
+      if (!stableGeometry) return null;
+
+      return {
+          yaw,
+          pitch,
+          roll,
+          eyeDistance,
+          noseRatio,
+          mouthCenter
+      };
+  }
+
+  function getHeadPoseState(pose) {
+      if (!pose) {
+          return {
+              state: "no-face",
+              message: "Head pose: chưa đủ landmark để tính góc.",
+              violationGesture: ""
+          };
+      }
+
+      const yawAbs = Math.abs(pose.yaw);
+      const pitchAbs = Math.abs(pose.pitch);
+      const rollAbs = Math.abs(pose.roll);
+      const directions = [];
+      let violationGesture = "";
+
+      if (yawAbs > HEAD_POSE_THRESHOLDS.yaw) {
+          if (!violationGesture) {
+              violationGesture = pose.yaw > 0 ? "looking_right" : "looking_left";
+          }
+          directions.push(pose.yaw > 0 ? "quay sang phải" : "quay sang trái");
+      }
+
+      if (pitchAbs > HEAD_POSE_THRESHOLDS.pitch) {
+          directions.push(pose.pitch > 0 ? "ngẩng lên" : "cúi xuống");
+          if (!violationGesture && pose.pitch < 0) {
+              violationGesture = "looking_down";
+          }
+      }
+
+      if (rollAbs > HEAD_POSE_THRESHOLDS.roll) {
+          directions.push(pose.roll > 0 ? "nghiêng phải" : "nghiêng trái");
+      }
+
+      if (directions.length === 0) {
+          return {
+              state: "normal",
+              message: "Head pose: nhìn tương đối thẳng.",
+              violationGesture: ""
+          };
+      }
+
+      return {
+          state: "warning",
+          message: `Head pose: ${directions.join(" · ")}.`,
+          violationGesture
+      };
+  }
+
+  function setProctorWarning(message = "", state = "warning") {
+      if (!proctorWarning) return;
+      proctorWarning.textContent = message;
+      proctorWarning.dataset.state = state;
+      proctorWarning.hidden = !message;
+  }
+
+  function resetViolationCandidate() {
+      activeViolationGesture = "";
+      activeViolationStartedAt = 0;
+      activeViolationReported = false;
+  }
+
+  async function reportProctorViolation(gesture, durationSeconds) {
+      if (violationReportInFlight || isExamLocked()) return;
+
+      const now = Date.now();
+      if (now - lastViolationReportAttemptAt < WARNING_RETRY_COOLDOWN_MS) {
+          return;
+      }
+
+      violationReportInFlight = true;
+      lastViolationReportAttemptAt = now;
+
+      try {
+          // STEP 10: lấy đúng 1 ảnh webcam tại thời điểm ghi nhận vi phạm.
+          const evidenceBlob =
+              await captureProctorEvidence();
+
+          const response = await fetch(reportProctorViolationUrl, {
+              method: "POST",
+              headers: {
+                  "X-CSRFToken": csrfToken
+              },
+              body: buildViolationFormData(
+                  gesture,
+                  durationSeconds,
+                  evidenceBlob
+              )
+          });
+
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+              throw new Error(
+                  result.message ||
+                  "Không thể ghi nhận cảnh báo."
+              );
+          }
+
+          activeViolationReported = true;
+
+          if (result.locked) {
+              setProctorWarning(
+                  `Đã ghi nhận cảnh báo ${result.warning_count}/3. Bài thi đang được tạm khóa để giảng viên kiểm tra.`,
+                  "danger"
+              );
+              setExamLocked(true, result.warning_count);
+              return;
+          }
+
+          setProctorWarning(
+              `Cảnh báo ${result.warning_count}/3: ${result.message}`,
+              result.warning_count >= 2 ? "danger" : "warning"
+          );
+
+      } catch (error) {
+          console.error("[Step 10] Evidence/warning report error:", error);
+          setProctorWarning(
+              "Không thể đồng bộ cảnh báo. Đang thử kết nối lại...",
+              "danger"
+          );
+      } finally {
+          violationReportInFlight = false;
+      }
+  }
+
+  function updateWarningEngine(poseState, pose) {
+      if (isExamLocked()) {
+          resetViolationCandidate();
+          return;
+      }
+
+      if (!pose || !poseState || poseState.state !== "warning" || !poseState.violationGesture) {
+          if (activeViolationGesture) {
+              resetViolationCandidate();
+              setProctorWarning("", "warning");
+          }
+          return;
+      }
+
+      const gesture = poseState.violationGesture;
+
+      if (gesture !== activeViolationGesture) {
+          activeViolationGesture = gesture;
+          activeViolationStartedAt = performance.now();
+          activeViolationReported = false;
+          setProctorWarning("Đang theo dõi tư thế bất thường...", "warning");
+          return;
+      }
+
+      if (activeViolationReported) {
+          return;
+      }
+
+      const durationMs = performance.now() - activeViolationStartedAt;
+      const remainingSeconds = Math.max(0, Math.ceil((WARNING_HOLD_MS - durationMs) / 1000));
+
+      if (durationMs < WARNING_HOLD_MS) {
+          setProctorWarning(
+              `Tư thế bất thường được giữ liên tục. Còn khoảng ${remainingSeconds} giây để hệ thống ghi nhận cảnh báo.`,
+              "warning"
+          );
+          return;
+      }
+
+      const durationSeconds = Math.max(2, Math.round(durationMs / 1000));
+      reportProctorViolation(gesture, durationSeconds);
+  }
+
+  function resetHeadPoseDisplay(message = "Head pose: đang chờ khuôn mặt.") {
+      setPoseValues(null, null, null);
+      setPoseDirection(message, "idle");
+  }
+
+  async function loadFaceLandmarker() {
+      if (faceLandmarkerInitialized) return true;
+      if (faceLandmarkerInitializing) return false;
+      faceLandmarkerInitializing = true;
+      setProctorAiStatus("Đang tải MediaPipe Face Landmarker...", "loading");
+      setProctorLandmarkInfo("Đang tải thư viện AI và model nhận diện khuôn mặt...");
+      try {
+          const visionModule = await import(MEDIAPIPE_VISION_CDN);
+          const FilesetResolver = visionModule.FilesetResolver;
+          const FaceLandmarker = visionModule.FaceLandmarker;
+          if (!FilesetResolver || !FaceLandmarker) throw new Error("MediaPipe Face Landmarker API không khả dụng.");
+          const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
+          faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+              baseOptions: {
+                  modelAssetPath: FACE_LANDMARKER_MODEL,
+                  delegate: "GPU"
+              },
+              runningMode: "VIDEO",
+              numFaces: 1,
+              minFaceDetectionConfidence: 0.5,
+              minFacePresenceConfidence: 0.5,
+              minTrackingConfidence: 0.5,
+              outputFaceBlendshapes: false,
+              outputFacialTransformationMatrixes: false
+          });
+          faceLandmarkerInitialized = true;
+          setProctorAiStatus("MediaPipe đã sẵn sàng.", "ready");
+          setProctorLandmarkInfo("Đang chờ webcam để phát hiện khuôn mặt...");
+          return true;
+      } catch (error) {
+          console.error("[Step 7] MediaPipe Face Landmarker error:", error);
+          faceLandmarker = null;
+          faceLandmarkerInitialized = false;
+          setProctorAiStatus("Không tải được MediaPipe Face Landmarker.", "error");
+          setProctorLandmarkInfo("Mở F12 → Console để xem chi tiết lỗi tải thư viện/model.");
+          resetHeadPoseDisplay("Head pose: chưa khả dụng.");
+          return false;
+      } finally {
+          faceLandmarkerInitializing = false;
+      }
+  }
+
+  function stopFaceLandmarkerLoop() {
+      if (faceLandmarkerAnimationFrame !== null) {
+          cancelAnimationFrame(faceLandmarkerAnimationFrame);
+          faceLandmarkerAnimationFrame = null;
+      }
+  }
+
+  function processFaceLandmarkerFrame(now) {
+      if (!faceLandmarker || !proctorVideo || proctorVideo.readyState < 2 || !proctorStream || isExamLocked()) return;
+      if (now - faceLandmarkerLastDetectionTime < 80) return;
+      if (proctorVideo.currentTime === faceLandmarkerLastVideoTime) return;
+      faceLandmarkerLastDetectionTime = now;
+      faceLandmarkerLastVideoTime = proctorVideo.currentTime;
+
+      try {
+          const result = faceLandmarker.detectForVideo(proctorVideo, now);
+          const faces = result?.faceLandmarks || [];
+          drawFaceLandmarks(result);
+
+          if (faces.length > 0) {
+              const pose = estimateHeadPose(faces[0]);
+              setProctorAiStatus("Đã phát hiện khuôn mặt.", "face");
+              setProctorLandmarkInfo(`Khuôn mặt: ${faces.length} · Facial landmarks: ${faces[0].length}`);
+
+              if (pose) {
+                  setPoseValues(pose.yaw, pose.pitch, pose.roll);
+                  const poseState = getHeadPoseState(pose);
+                  setPoseDirection(poseState.message, poseState.state);
+                  updateWarningEngine(poseState, pose);
+              } else {
+                  resetHeadPoseDisplay("Head pose: chưa đủ dữ liệu landmark.");
+                  updateWarningEngine(null, null);
+              }
+          } else {
+              setProctorAiStatus("Chưa phát hiện khuôn mặt.", "no-face");
+              setProctorLandmarkInfo("Hãy đảm bảo khuôn mặt nằm rõ trong khung webcam.");
+              resetHeadPoseDisplay("Head pose: không có khuôn mặt.");
+              updateWarningEngine(null, null);
+          }
+      } catch (error) {
+          console.error("[Step 7] Face Landmarker detection error:", error);
+          setProctorAiStatus("Lỗi xử lý Face Landmarker.", "error");
+          resetHeadPoseDisplay("Head pose: lỗi xử lý.");
+      }
+  }
+
+  function startFaceLandmarkerLoop() {
+      stopFaceLandmarkerLoop();
+      faceLandmarkerLastVideoTime = -1;
+      faceLandmarkerLastDetectionTime = 0;
+      function renderLoop(now) {
+          if (faceLandmarker && proctorStream && proctorVideo && !isExamLocked()) {
+              processFaceLandmarkerFrame(now);
+              faceLandmarkerAnimationFrame = requestAnimationFrame(renderLoop);
+          } else {
+              faceLandmarkerAnimationFrame = null;
+          }
+      }
+      faceLandmarkerAnimationFrame = requestAnimationFrame(renderLoop);
+  }
+
+  async function startFaceLandmarkerWhenReady() {
+      if (!proctorStream || !proctorVideo || isExamLocked()) return;
+      const ready = await loadFaceLandmarker();
+      if (!ready || !proctorStream) return;
+      resizeProctorLandmarkCanvas();
+      startFaceLandmarkerLoop();
+  }
+
+  function stopProctoringCamera() {
+      stopFaceLandmarkerLoop();
+      clearProctorLandmarks();
+      resetHeadPoseDisplay("Head pose: đang chờ webcam.");
+      resetViolationCandidate();
+      setProctorWarning("", "warning");
+      if (proctorStream) {
+          proctorStream.getTracks().forEach(track => track.stop());
+          proctorStream = null;
+      }
+      if (proctorVideo) proctorVideo.srcObject = null;
+      faceLandmarkerLastVideoTime = -1;
+      if (faceLandmarkerInitialized) {
+          setProctorAiStatus("MediaPipe đã sẵn sàng, đang chờ webcam.", "ready");
+          setProctorLandmarkInfo("Bật webcam để bắt đầu nhận diện landmarks và head pose.");
+      }
+  }
+
+  function handleCameraError(error) {
+      if (!error) {
+          setProctorStatus("Không thể bật webcam.", "error");
+          return;
+      }
+      switch (error.name) {
+          case "NotAllowedError":
+          case "PermissionDeniedError":
+              setProctorStatus("Bạn chưa cấp quyền sử dụng webcam. Hãy cho phép Camera trong trình duyệt rồi thử lại.", "error");
+              break;
+          case "NotFoundError":
+          case "DevicesNotFoundError":
+              setProctorStatus("Không tìm thấy webcam trên thiết bị.", "error");
+              break;
+          case "NotReadableError":
+          case "TrackStartError":
+              setProctorStatus("Webcam đang được ứng dụng khác sử dụng hoặc không thể truy cập.", "error");
+              break;
+          case "SecurityError":
+              setProctorStatus("Trình duyệt không cho phép truy cập webcam trong ngữ cảnh hiện tại.", "error");
+              break;
+          default:
+              setProctorStatus("Không thể bật webcam. Vui lòng kiểm tra quyền Camera của trình duyệt.", "error");
+              break;
+      }
+  }
+
+  async function startProctoringCamera() {
+      if (!proctorVideo || !startProctoring) return;
+      if (isExamLocked()) {
+          setProctorStatus("Bài thi đang tạm khóa. Webcam sẽ được giữ ở trạng thái chờ.", "locked");
+          return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setProctorStatus("Trình duyệt không hỗ trợ truy cập webcam.", "error");
+          return;
+      }
+      startProctoring.disabled = true;
+      setProctorStatus("Đang yêu cầu quyền truy cập webcam...", "loading");
+      setProctorAiStatus("Đang khởi động AI...", "loading");
+      try {
+          stopProctoringCamera();
+          proctorStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+              audio: false
+          });
+          proctorVideo.srcObject = proctorStream;
+          await proctorVideo.play();
+          setProctorStatus("Camera đang hoạt động.", "active");
+          startProctoring.innerHTML = '<i class="bi bi-camera-video-fill"></i> Webcam đang bật';
+          resizeProctorLandmarkCanvas();
+          await startFaceLandmarkerWhenReady();
+      } catch (error) {
+          console.error("[Step 7] Webcam startup error:", error);
+          stopProctoringCamera();
+          startProctoring.disabled = false;
+          startProctoring.innerHTML = '<i class="bi bi-camera-video"></i> Thử bật webcam lại';
+          handleCameraError(error);
+          setProctorAiStatus("AI chưa khởi động.", "error");
+      }
+  }
+
+  if (startProctoring) startProctoring.addEventListener("click", startProctoringCamera);
+  if (proctorVideo) {
+      proctorVideo.addEventListener("loadedmetadata", function() {
+          resizeProctorLandmarkCanvas();
+          if (proctorStream) setProctorStatus("Camera đang hoạt động.", "active");
+      });
+  }
+  window.addEventListener("resize", resizeProctorLandmarkCanvas);
+  window.addEventListener("pagehide", stopProctoringCamera);
+  window.addEventListener("pagehide", function() {
+      if (screenShareActive || screenShareTrack || screenShareStream) {
+          stopScreenSharing({
+              notifyBackend: true,
+              stateMessage: "Đã dừng chia sẻ khi rời trang.",
+              keepalive: true
+          });
+      }
+  });
+
+  /* =========================================================
+     STEP 13 - SCREEN SHARING
+     Chỉ ghi nhận trạng thái và sự kiện; không tải video màn hình lên server.
+     ========================================================= */
+
+  const startScreenSharingButton = document.getElementById("start-screen-sharing");
+  const stopScreenSharingButton = document.getElementById("stop-screen-sharing");
+  const screenShareStatus = document.getElementById("screen-share-status");
+  const startScreenSharingUrl = "{% url 'start_screen_sharing' student_exam.id %}";
+  const stopScreenSharingUrl = "{% url 'stop_screen_sharing' student_exam.id %}";
+
+  let screenShareStream = null;
+  let screenShareTrack = null;
+  let screenShareStopInProgress = false;
+  let screenShareEndedHandler = null;
+
+  // STEP 15.2.2 - WebRTC signaling
+  let screenShareSocket = null;
+  let screenSharePeerConnection = null;
+  let screenShareReconnectTimer = null;
+
+  const screenShareWebSocketUrl =
+      `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/screen-share/${studentExamId}/`;
+
+  const screenShareRtcConfig = {
+      iceServers: [
+          { urls: "stun:stun.l.google.com:19302" }
+      ]
+  };
+
+  function closeScreenShareWebRTC() {
+      if (screenShareReconnectTimer) {
+          clearTimeout(screenShareReconnectTimer);
+          screenShareReconnectTimer = null;
+      }
+
+      if (screenShareSocket) {
+          screenShareSocket.onopen = null;
+          screenShareSocket.onmessage = null;
+          screenShareSocket.onerror = null;
+          screenShareSocket.onclose = null;
+
+          if (
+              screenShareSocket.readyState === WebSocket.OPEN ||
+              screenShareSocket.readyState === WebSocket.CONNECTING
+          ) {
+              screenShareSocket.close();
+          }
+
+          screenShareSocket = null;
+      }
+
+      if (screenSharePeerConnection) {
+          screenSharePeerConnection.onicecandidate = null;
+          screenSharePeerConnection.onconnectionstatechange = null;
+          screenSharePeerConnection.close();
+          screenSharePeerConnection = null;
+      }
+  }
+
+  function sendScreenShareSignal(message) {
+      if (
+          !screenShareSocket ||
+          screenShareSocket.readyState !== WebSocket.OPEN
+      ) {
+          return false;
+      }
+
+      screenShareSocket.send(JSON.stringify(message));
+      return true;
+  }
+
+  function createScreenSharePeerConnection() {
+      if (screenSharePeerConnection) {
+          screenSharePeerConnection.close();
+      }
+
+      const pc = new RTCPeerConnection(screenShareRtcConfig);
+      screenSharePeerConnection = pc;
+
+      if (!screenShareStream || !screenShareActive) {
+          console.warn("Chưa có luồng màn hình để truyền WebRTC.");
+          return null;
+      }
+
+      screenShareStream.getTracks().forEach(track => {
+          pc.addTrack(track, screenShareStream);
+      });
+
+      pc.onicecandidate = event => {
+          if (event.candidate) {
+              sendScreenShareSignal({
+                  type: "ice_candidate",
+                  candidate: event.candidate
+              });
+          }
+      };
+
+      pc.onconnectionstatechange = () => {
+          console.log(
+              "[WebRTC] Trạng thái kết nối:",
+              pc.connectionState
+          );
+      };
+
+      return pc;
+  }
+
+  async function createScreenShareOffer() {
+      if (
+          !screenShareActive ||
+          !screenShareStream ||
+          !screenShareSocket ||
+          screenShareSocket.readyState !== WebSocket.OPEN
+      ) {
+          return;
+      }
+
+      try {
+          const pc = createScreenSharePeerConnection();
+          if (!pc) return;
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          sendScreenShareSignal({
+              type: "offer",
+              description: {
+                  type: pc.localDescription.type,
+                  sdp: pc.localDescription.sdp
+              }
+          });
+      } catch (error) {
+          console.error("[WebRTC] Không tạo được offer:", error);
+      }
+  }
+
+  function connectScreenShareSignaling() {
+      if (
+          !screenShareActive ||
+          !screenShareStream ||
+          screenShareSocket
+      ) {
+          return;
+      }
+
+      const socket = new WebSocket(screenShareWebSocketUrl);
+      screenShareSocket = socket;
+
+      socket.onopen = () => {
+          console.log("[WebRTC] WebSocket đã kết nối.");
+      };
+
+      socket.onmessage = async event => {
+          let message;
+
+          try {
+              message = JSON.parse(event.data);
+          } catch (error) {
+              console.warn("[WebRTC] Thông điệp không hợp lệ:", error);
+              return;
+          }
+
+          if (message.type === "connected") {
+              console.log(
+                  "[WebRTC] Signaling đã xác thực:",
+                  message.role
+              );
+              return;
+          }
+
+          if (message.type === "request_offer") {
+              await createScreenShareOffer();
+              return;
+          }
+
+          if (message.type === "answer") {
+              const pc = screenSharePeerConnection;
+
+              if (!pc || !message.description) return;
+
+              try {
+                  await pc.setRemoteDescription(
+                      new RTCSessionDescription(message.description)
+                  );
+              } catch (error) {
+                  console.error("[WebRTC] Không nhận được answer:", error);
+              }
+
+              return;
+          }
+
+          if (message.type === "ice_candidate") {
+              const pc = screenSharePeerConnection;
+
+              if (!pc || !message.candidate) return;
+
+              try {
+                  await pc.addIceCandidate(
+                      new RTCIceCandidate(message.candidate)
+                  );
+              } catch (error) {
+                  console.error("[WebRTC] Không thêm được ICE candidate:", error);
+              }
+
+              return;
+          }
+
+          // if (message.type === "peer_joined" && message.role === "lecturer") {
+          //     await createScreenShareOffer();
+          //     return;
+          // }
+
+          if (message.type === "peer_left") {
+              console.log("[WebRTC] Một kết nối giám sát đã ngắt.");
+              return;
+          }
+
+          if (message.type === "error") {
+              console.error("[WebRTC] Signaling lỗi:", message.message);
+          }
+      };
+
+      socket.onerror = error => {
+          console.error("[WebRTC] Lỗi WebSocket:", error);
+      };
+
+      socket.onclose = () => {
+          if (screenShareSocket === socket) {
+              screenShareSocket = null;
+          }
+
+          console.log("[WebRTC] WebSocket đã đóng.");
+      };
+  }
+
+  let screenShareActive = {{ student_exam.is_screen_sharing|yesno:"true,false" }};
+
+  function setScreenShareStatus(message, state = "idle") {
+      if (!screenShareStatus) return;
+      screenShareStatus.textContent = message;
+      screenShareStatus.dataset.state = state;
+  }
+
+  function updateScreenShareButtons(active, busy = false) {
+      if (startScreenSharingButton) {
+          startScreenSharingButton.disabled = Boolean(active || busy || isExamLocked());
+          startScreenSharingButton.innerHTML = active
+              ? '<i class="bi bi-check-circle-fill"></i> Đang chia sẻ'
+              : '<i class="bi bi-display"></i> Chia sẻ màn hình';
+      }
+      if (stopScreenSharingButton) {
+          stopScreenSharingButton.disabled = Boolean(!active || busy);
+      }
+  }
+
+  async function postScreenShareState(url, keepalive = false) {
+      const response = await fetch(url, {
+          method: "POST",
+          headers: {
+              "X-CSRFToken": csrfToken,
+              "X-Requested-With": "XMLHttpRequest"
+          },
+          credentials: "same-origin",
+          cache: "no-store",
+          keepalive: Boolean(keepalive)
+      });
+      let data = {};
+      try {
+          data = await response.json();
+      } catch (error) {
+          // Báo lỗi HTTP bên dưới nếu response không phải JSON.
+      }
+      if (!response.ok || !data.success) {
+          throw new Error(data.message || `Yêu cầu chia sẻ màn hình thất bại (${response.status}).`);
+      }
+      return data;
+  }
+
+  function releaseScreenShareTracks() {
+      const stream = screenShareStream;
+      const track = screenShareTrack;
+      screenShareStream = null;
+      screenShareTrack = null;
+      screenShareEndedHandler = null;
+      if (track) {
+          track.onended = null;
+          try {
+              track.stop();
+          } catch (error) {
+              console.debug("Không cần dừng track chia sẻ màn hình:", error);
+          }
+      }
+      if (stream) {
+          stream.getTracks().forEach(item => {
+              if (item.readyState !== "ended") {
+                  try { item.stop(); } catch (error) {}
+              }
+          });
+      }
+  }
+
+  async function stopScreenSharing({
+      notifyBackend = true,
+      stateMessage = "Đã dừng chia sẻ màn hình.",
+      state = "idle",
+      keepalive = false
+  } = {}) {
+      if (screenShareStopInProgress) return;
+      const wasActive = screenShareActive || Boolean(screenShareTrack) || Boolean(screenShareStream);
+      if (!wasActive) {
+          releaseScreenShareTracks();
+          updateScreenShareButtons(false);
+          return;
+      }
+
+      screenShareStopInProgress = true;
+      screenShareActive = false;
+      screenShareStopInProgress = true;
+      screenShareActive = false;
+      closeScreenShareWebRTC();
+      releaseScreenShareTracks();
+      releaseScreenShareTracks();
+      updateScreenShareButtons(false, true);
+
+      try {
+          if (notifyBackend) {
+              await postScreenShareState(stopScreenSharingUrl, keepalive);
+          }
+          setScreenShareStatus(stateMessage, state);
+      } catch (error) {
+          console.error("[Step 13] Không đồng bộ được trạng thái dừng chia sẻ màn hình:", error);
+          setScreenShareStatus(
+              "Đã dừng chia sẻ trên trình duyệt nhưng chưa đồng bộ được với máy chủ. Hãy kiểm tra kết nối và tải lại nếu cần.",
+              "error"
+          );
+      } finally {
+          screenShareStopInProgress = false;
+          updateScreenShareButtons(false);
+      }
+  }
+
+  async function handleScreenShareTrackEnded() {
+      // Trình duyệt gọi sự kiện này khi người dùng nhấn "Stop sharing".
+      if (!screenShareActive || screenShareStopInProgress) return;
+      screenShareActive = false;
+      closeScreenShareWebRTC();
+      releaseScreenShareTracks();
+      updateScreenShareButtons(false, true);
+      try {
+          await postScreenShareState(stopScreenSharingUrl);
+          setScreenShareStatus(
+              "Bạn đã dừng chia sẻ màn hình trong trình duyệt. Sự kiện đã được ghi nhận; hãy chia sẻ lại nếu giảng viên yêu cầu.",
+              "warning"
+          );
+      } catch (error) {
+          console.error("[Step 13] Không ghi nhận được sự kiện dừng chia sẻ:", error);
+          setScreenShareStatus(
+              "Chia sẻ màn hình đã dừng nhưng chưa ghi nhận được trên máy chủ. Hãy kiểm tra kết nối.",
+              "error"
+          );
+      } finally {
+          updateScreenShareButtons(false);
+      }
+  }
+
+  async function startScreenSharing() {
+      if (isExamLocked()) {
+          setScreenShareStatus("Bài thi đang bị khóa; không thể bắt đầu chia sẻ màn hình.", "error");
+          return;
+      }
+      if (screenShareActive) {
+          setScreenShareStatus("Màn hình đang được chia sẻ.", "active");
+          return;
+      }
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== "function") {
+          setScreenShareStatus(
+              "Trình duyệt không hỗ trợ chia sẻ màn hình. Hãy dùng phiên bản Chrome/Edge mới trên localhost hoặc HTTPS.",
+              "error"
+          );
+          return;
+      }
+
+      updateScreenShareButtons(false, true);
+      setScreenShareStatus("Đang mở hộp thoại của trình duyệt. Hãy chọn màn hình hoặc cửa sổ cần chia sẻ...", "idle");
+      try {
+          // getDisplayMedia cần được gọi trực tiếp sau thao tác của người dùng.
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: false
+          });
+          const track = stream.getVideoTracks()[0];
+          if (!track) {
+              stream.getTracks().forEach(item => item.stop());
+              throw new Error("Trình duyệt không cung cấp luồng video màn hình.");
+          }
+          if (isExamLocked()) {
+              stream.getTracks().forEach(item => item.stop());
+              throw new Error("Bài thi vừa bị khóa; không thể bắt đầu chia sẻ màn hình.");
+          }
+
+          screenShareStream = stream;
+          screenShareTrack = track;
+          screenShareEndedHandler = handleScreenShareTrackEnded;
+          track.addEventListener("ended", screenShareEndedHandler, { once: true });
+
+          try {
+              await postScreenShareState(startScreenSharingUrl);
+          } catch (error) {
+              releaseScreenShareTracks();
+              throw error;
+          }
+
+          // screenShareActive = true;
+          // updateScreenShareButtons(true);
+          // setScreenShareStatus(
+          //     "Đang chia sẻ màn hình. Hệ thống chỉ ghi nhận trạng thái và sự kiện bắt đầu/dừng; không tải video màn hình lên máy chủ.",
+          //     "active"
+          // );
+          screenShareActive = true;
+          updateScreenShareButtons(true);
+          setScreenShareStatus(
+          "Đang chia sẻ màn hình và khởi tạo kết nối xem trực tiếp...",
+          "active"
+          );
+          connectScreenShareSignaling();
+      } catch (error) {
+          console.warn("[Step 13] Không thể bắt đầu chia sẻ màn hình:", error);
+          screenShareActive = false;
+          releaseScreenShareTracks();
+          updateScreenShareButtons(false);
+          if (error && error.name === "NotAllowedError") {
+              setScreenShareStatus("Bạn đã hủy hoặc từ chối quyền chia sẻ màn hình. Nếu bài thi yêu cầu, hãy nhấn chia sẻ và chọn màn hình.", "warning");
+          } else {
+              setScreenShareStatus(error.message || "Không thể bắt đầu chia sẻ màn hình. Hãy kiểm tra quyền trình duyệt và thử lại.", "error");
+          }
+      }
+  }
+
+  if (startScreenSharingButton) {
+      startScreenSharingButton.addEventListener("click", startScreenSharing);
+  }
+  if (stopScreenSharingButton) {
+      stopScreenSharingButton.addEventListener("click", function() {
+          stopScreenSharing({
+              notifyBackend: true,
+              stateMessage: "Bạn đã dừng chia sẻ màn hình. Sự kiện đã được ghi nhận.",
+              state: "warning"
+          });
+      });
+  }
+
+  // Chỉ dừng chia sẻ khi biểu mẫu thực sự được gửi.
+  // handleBeforeSubmit() cũng chạy lúc khởi tạo để đồng bộ câu trả lời,
+  // vì vậy không đặt logic dừng chia sẻ bên trong hàm đó.
+  if (examForm) {
+      examForm.addEventListener("submit", function() {
+          if (screenShareActive || screenShareTrack || screenShareStream) {
+              stopScreenSharing({
+                  notifyBackend: true,
+                  stateMessage: "Đã dừng chia sẻ màn hình khi nộp bài.",
+                  state: "idle",
+                  keepalive: true
+              });
+          }
+      });
+  }
+
+  // Trạng thái ban đầu từ DB, phòng trường hợp tải lại trang khi đang chia sẻ.
+  if (screenShareActive) {
+      setScreenShareStatus(
+          "Máy chủ đang ghi nhận trạng thái chia sẻ từ trước. Nếu trình duyệt không còn chia sẻ, hãy nhấn chia sẻ màn hình để đồng bộ lại.",
+          "warning"
+      );
+      screenShareActive = false;
+      updateScreenShareButtons(false);
+  } else {
+      updateScreenShareButtons(false);
+  }
+
+  /* =========================================================
+     LOCKED STATE - KHÓA TƯƠNG TÁC Ở FRONTEND
+     Backend vẫn là lớp bảo mật chính.
+     ========================================================= */
+
+  document.addEventListener(
+      "keydown",
+      function(event) {
+
+          if (!isExamLocked()) {
+              return;
+          }
+
+          // Cho phép các phím không làm thay đổi bài thi?
+          // Ở Bước 3 ta khóa toàn bộ tương tác để overlay hoạt động như
+          // một modal thực sự. Backend vẫn chặn autosave/submit/run code.
+          event.preventDefault();
+          event.stopPropagation();
+      },
+      true
+  );
 
 
   /* =========================================================
@@ -2540,12 +3859,162 @@
 
           initCodeEditors();
 
+          setExamLocked(
+              examIsLocked,
+              examWarningCount
+          );
+          startExamStatusPolling();
           updateProgress();
 
           handleBeforeSubmit();
 
       }
   );
+
+  /* ============================================================
+     STEP 4 - REALTIME EXAM STATUS POLLING
+     ============================================================ */
+
+  const examStatusUrl =
+      "{% url 'student_exam_status' student_exam.id %}";
+
+  let examStatusPolling = null;
+  let examStatusRequestInProgress = false;
+
+
+  function handleExamStatus(data) {
+
+      if (!data || !data.success) {
+          return;
+      }
+
+      // --------------------------------------------------------
+      // 1. Bài thi đã bị terminate
+      // --------------------------------------------------------
+
+      if (data.is_terminated) {
+
+          stopExamStatusPolling();
+
+          window.location.href =
+              "{% url 'exam_result' student_exam.id %}";
+
+          return;
+      }
+
+
+      // --------------------------------------------------------
+      // 2. Bài thi đã submit
+      // --------------------------------------------------------
+
+      if (data.is_submitted) {
+
+          stopExamStatusPolling();
+
+          window.location.href =
+              "{% url 'exam_result' student_exam.id %}";
+
+          return;
+      }
+
+
+      // --------------------------------------------------------
+      // 3. Đồng bộ trạng thái LOCK / UNLOCK
+      // --------------------------------------------------------
+
+      // setExamLocked là nguồn sự thật duy nhất ở frontend.
+      // Không tự thao tác overlay bằng một hàm thứ hai để tránh
+      // tình trạng giao diện và biến examIsLocked bị lệch nhau.
+
+      setExamLocked(
+          data.is_locked,
+          data.warning_count
+      );
+  }
+
+
+  async function pollExamStatus() {
+
+      if (examStatusRequestInProgress) {
+          return;
+      }
+
+      examStatusRequestInProgress = true;
+
+      try {
+
+          const response =
+              await fetch(
+                  examStatusUrl,
+                  {
+                      method: "GET",
+                      headers: {
+                          "X-Requested-With":
+                              "XMLHttpRequest"
+                      },
+                      credentials: "same-origin",
+                      cache: "no-store"
+                  }
+              );
+
+
+          if (!response.ok) {
+
+              console.warn(
+                  "Không thể kiểm tra trạng thái bài thi:",
+                  response.status
+              );
+
+              return;
+          }
+
+
+          const data =
+              await response.json();
+
+          handleExamStatus(data);
+
+      } catch (error) {
+
+          console.warn(
+              "Lỗi polling trạng thái bài thi:",
+              error
+          );
+
+      } finally {
+
+          examStatusRequestInProgress = false;
+      }
+  }
+
+
+  function startExamStatusPolling() {
+
+      // Kiểm tra ngay lần đầu.
+      pollExamStatus();
+
+      // Sau đó kiểm tra mỗi 1 giây.
+      examStatusPolling =
+          setInterval(
+              pollExamStatus,
+              1000
+          );
+  }
+
+
+  function stopExamStatusPolling() {
+
+      if (examStatusPolling !== null) {
+
+          clearInterval(
+              examStatusPolling
+          );
+
+          examStatusPolling = null;
+      }
+  }
+
 </script>
 
 {% endblock %}
+

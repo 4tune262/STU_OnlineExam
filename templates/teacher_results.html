@@ -1,173 +1,644 @@
+
 {% extends "base.html" %}
 
 {% block body_block %}
 
+<style>
+  .teacher-results-page {
+    --results-primary: #2563eb;
+    --results-primary-dark: #1d4ed8;
+    --results-text: #172b4d;
+    --results-muted: #64748b;
+    --results-border: #e5ebf4;
+    --results-surface: #ffffff;
+    --results-bg: #f5f8fd;
+
+    max-width: 1500px;
+    margin: 0 auto;
+    padding: 28px 24px 44px;
+    color: var(--results-text);
+  }
+
+  .teacher-results-page,
+  .teacher-results-page * {
+    box-sizing: border-box;
+  }
+
+  .teacher-results-page .page-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .teacher-results-page .page-heading-content {
+    min-width: 0;
+  }
+
+  .teacher-results-page .eyebrow {
+    margin: 0 0 9px;
+    color: var(--results-primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+  }
+
+  .teacher-results-page .page-heading h1 {
+    margin: 0;
+    font-size: clamp(25px, 3vw, 34px);
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    line-height: 1.3;
+  }
+
+  .teacher-results-page .page-description {
+    margin: 10px 0 0;
+    color: var(--results-muted);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .teacher-results-page .heading-icon {
+    display: flex;
+    flex: 0 0 76px;
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 76px;
+    border: 1px solid #dbeafe;
+    border-radius: 22px;
+    background: linear-gradient(145deg, #eff6ff, #dbeafe);
+    color: var(--results-primary);
+    font-size: 32px;
+  }
+
+  /* Thẻ lớp học phần */
+  .teacher-results-page .teacher-offering-section {
+    overflow: hidden;
+    margin-bottom: 24px;
+    border: 1px solid var(--results-border);
+    border-radius: 18px;
+    background: var(--results-surface);
+    box-shadow: 0 5px 22px rgb(25 55 100 / 5%);
+    transition: box-shadow 0.2s ease,
+                border-color 0.2s ease;
+  }
+
+  .teacher-results-page .teacher-offering-section:hover {
+    border-color: #cbdaf4;
+    box-shadow: 0 9px 28px rgb(25 55 100 / 8%);
+  }
+
+  .teacher-results-page .offering-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 24px;
+    border-bottom: 1px solid #e7eef9;
+    background: linear-gradient(110deg, #eff6ff 0%, #f8fbff 65%, #ffffff 100%);
+  }
+
+  .teacher-results-page .offering-identity {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .teacher-results-page .offering-code {
+    display: flex;
+    flex: 0 0 62px;
+    align-items: center;
+    justify-content: center;
+    width: 62px;
+    min-height: 62px;
+    padding: 8px;
+    border-radius: 15px;
+    background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+    box-shadow: 0 5px 12px rgb(37 99 235 / 18%);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .teacher-results-page .offering-meta {
+    min-width: 0;
+  }
+
+  .teacher-results-page .meta-label {
+    display: block;
+    margin-bottom: 5px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  .teacher-results-page .offering-title {
+    margin: 0;
+    color: var(--results-text);
+    font-size: 18px;
+    font-weight: 750;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .teacher-results-page .offering-subtitle {
+    margin: 5px 0 0;
+    color: var(--results-muted);
+    font-size: 13px;
+  }
+
+  .teacher-results-page .student-count {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 13px;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #fff;
+    color: #1d4ed8;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* Khu vực danh sách bài thi */
+  .teacher-results-page .exam-content {
+    padding: 22px 24px 24px;
+  }
+
+  .teacher-results-page .exam-section-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 15px;
+    color: var(--results-text);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .teacher-results-page .exam-section-title i {
+    color: var(--results-primary);
+    font-size: 18px;
+  }
+
+  .teacher-results-page .teacher-exam-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--results-border);
+    border-radius: 12px;
+  }
+
+  .teacher-results-page .teacher-exam-table {
+    width: 100%;
+    min-width: 720px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .teacher-results-page .teacher-exam-table thead th {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--results-border);
+    background: #f7f9fc;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .teacher-results-page .teacher-exam-table tbody td {
+    padding: 16px;
+    border-bottom: 1px solid #edf1f7;
+    background: #fff;
+    vertical-align: middle;
+    font-size: 13px;
+  }
+
+  .teacher-results-page .teacher-exam-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .teacher-results-page .teacher-exam-table tbody tr {
+    transition: background 0.15s ease;
+  }
+
+  .teacher-results-page .teacher-exam-table tbody tr:hover td {
+    background: #f8fbff;
+  }
+
+  .teacher-results-page .exam-name {
+    display: block;
+    color: #243b60;
+    font-size: 13px;
+    font-weight: 750;
+    line-height: 1.5;
+  }
+
+  .teacher-results-page .exam-paper-count {
+    display: inline-block;
+    margin-top: 5px;
+    color: var(--results-muted);
+    font-size: 12px;
+  }
+
+  .teacher-results-page .exam-time {
+    min-width: 190px;
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  .teacher-results-page .exam-time i {
+    margin-right: 5px;
+    color: #7890b2;
+  }
+
+  .teacher-results-page .exam-duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .teacher-results-page .exam-duration i {
+    color: #64748b;
+  }
+
+  .teacher-results-page .report-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .teacher-results-page .report-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background 0.18s ease,
+                border-color 0.18s ease,
+                transform 0.18s ease;
+  }
+
+  .teacher-results-page .report-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .teacher-results-page .report-btn-view {
+    border-color: #cfe0ff;
+    background: #fff;
+    color: #1d4ed8;
+  }
+
+  .teacher-results-page .report-btn-view:hover {
+    border-color: #93b8ff;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .teacher-results-page .report-btn-pdf {
+    border-color: var(--results-primary);
+    background: var(--results-primary);
+    color: #fff;
+  }
+
+  .teacher-results-page .report-btn-pdf:hover {
+    border-color: var(--results-primary-dark);
+    background: var(--results-primary-dark);
+    color: #fff;
+  }
+
+  .teacher-results-page .exam-empty-cell {
+    padding: 30px 16px !important;
+    color: var(--results-muted);
+    text-align: center;
+  }
+
+  .teacher-results-page .exam-empty-cell i {
+    display: block;
+    margin-bottom: 9px;
+    color: #94a3b8;
+    font-size: 24px;
+  }
+
+  .teacher-results-page .exam-empty-cell p {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  /* Trạng thái chưa có lớp */
+  .teacher-results-page .empty-state {
+    padding: 48px 24px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 18px;
+    background: #f8fafc;
+    color: var(--results-muted);
+    text-align: center;
+  }
+
+  .teacher-results-page .empty-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    border-radius: 20px;
+    background: #eaf1ff;
+    color: var(--results-primary);
+    font-size: 27px;
+  }
+
+  .teacher-results-page .empty-state h2 {
+    margin: 0 0 8px;
+    color: var(--results-text);
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .teacher-results-page .empty-state p {
+    max-width: 450px;
+    margin: 0 auto;
+    font-size: 13px;
+    line-height: 1.8;
+  }
+
+  @media (max-width: 768px) {
+    .teacher-results-page {
+      padding: 20px 12px 32px;
+    }
+
+    .teacher-results-page .page-heading {
+      margin-bottom: 20px;
+    }
+
+    .teacher-results-page .heading-icon {
+      display: none;
+    }
+
+    .teacher-results-page .offering-header {
+      align-items: flex-start;
+      padding: 17px;
+    }
+
+    .teacher-results-page .offering-identity {
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .teacher-results-page .offering-code {
+      flex-basis: 50px;
+      width: 50px;
+      min-height: 50px;
+      font-size: 11px;
+    }
+
+    .teacher-results-page .offering-title {
+      font-size: 15px;
+    }
+
+    .teacher-results-page .student-count {
+      padding: 8px;
+      font-size: 11px;
+    }
+
+    .teacher-results-page .student-count i {
+      display: none;
+    }
+
+    .teacher-results-page .exam-content {
+      padding: 17px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .teacher-results-page .offering-header {
+      flex-wrap: wrap;
+    }
+
+    .teacher-results-page .student-count {
+      margin-left: 62px;
+    }
+
+    .teacher-results-page .page-heading h1 {
+      font-size: 25px;
+    }
+  }
+</style>
+
 <main class="teacher-results-page">
 
+  <!-- TIÊU ĐỀ TRANG -->
   <header class="page-heading">
+    <div class="page-heading-content">
+      <p class="eyebrow">
+        GIẢNG VIÊN <span aria-hidden="true">/</span> BÁO CÁO
+      </p>
 
-    <p class="eyebrow">
-      GIẢNG VIÊN · BÁO CÁO
-    </p>
+      <h1>Kết quả các lớp phụ trách</h1>
 
-    <h1>
-      Kết quả các lớp phụ trách
-    </h1>
+      <p class="page-description">
+        Theo dõi các bài thi, xem kết quả sinh viên và xuất báo cáo
+        cho những lớp học phần bạn phụ trách.
+      </p>
+    </div>
 
-    <p class="text-muted">
-      Chọn lớp học phần và bài thi để xem danh sách sinh viên, điểm và tải báo cáo.
-    </p>
-
+    <div class="heading-icon" aria-hidden="true">
+      <i class="bi bi-clipboard-data"></i>
+    </div>
   </header>
 
 
+  <!-- DANH SÁCH LỚP HỌC PHẦN -->
   {% for offering in offerings %}
 
   <section class="teacher-offering-section">
 
-    <div class="teacher-offering-heading">
+    <!-- THÔNG TIN LỚP -->
+    <div class="offering-header">
 
-      <div>
+      <div class="offering-identity">
 
-        <span class="offering-code">
+        <div class="offering-code">
           {{ offering.group_code }}
-        </span>
+        </div>
 
-        <h2>
-          {{ offering.course.code }} · {{ offering.course.name }}
-        </h2>
+        <div class="offering-meta">
+          <span class="meta-label">Lớp học phần</span>
 
-        <p>
-          {{ offering.term }} · Ca {{ offering.session_number }}
-        </p>
+          <h2 class="offering-title">
+            {{ offering.course.code }} · {{ offering.course.name }}
+          </h2>
+
+          <p class="offering-subtitle">
+            <i class="bi bi-calendar3 me-1"></i>
+            {{ offering.term }}
+            <span class="mx-1">·</span>
+            <i class="bi bi-clock me-1"></i>
+            Ca {{ offering.session_number }}
+          </p>
+        </div>
 
       </div>
 
-      <span class="offering-students">
+      <div class="student-count">
+        <i class="bi bi-people-fill"></i>
         {{ offering.enrollments.count }} sinh viên
-      </span>
+      </div>
 
     </div>
 
 
-    <div class="teacher-exam-table-wrap">
+    <!-- DANH SÁCH BÀI THI -->
+    <div class="exam-content">
 
-      <table class="table teacher-exam-table align-middle mb-0">
+      <h3 class="exam-section-title">
+        <i class="bi bi-journal-text"></i>
+        Danh sách bài thi
+      </h3>
 
-        <thead>
+      <div class="teacher-exam-table-wrap">
 
-          <tr>
-            <th>Bài thi</th>
-            <th>Thời gian</th>
-            <th>Thời lượng</th>
-            <th class="text-end">Báo cáo</th>
-          </tr>
+        <table class="table teacher-exam-table mb-0">
 
-        </thead>
+          <thead>
+            <tr>
+              <th scope="col">Bài thi</th>
+              <th scope="col">Thời gian</th>
+              <th scope="col">Thời lượng</th>
+              <th scope="col" class="text-end">Thao tác</th>
+            </tr>
+          </thead>
 
+          <tbody>
 
-        <tbody>
+            {% for exam in offering.report_exams %}
 
-          {% for exam in offering.report_exams %}
+            <tr>
 
-          <tr>
-
-            <!-- BÀI THI -->
-            <td>
-
-              <strong>
-                {{ exam.title }}
-              </strong>
-
-              <small>
-                {{ exam.number_of_papers }} mã đề
-              </small>
-
-            </td>
-
-
-            <!-- THỜI GIAN -->
-            <td>
-
-              {{ exam.start_time|date:"d/m/Y H:i" }}
-              –
-              {{ exam.end_time|date:"d/m/Y H:i" }}
-
-            </td>
-
-
-            <!-- THỜI LƯỢNG -->
-            <td>
-              {{ exam.duration_minutes }} phút
-            </td>
-
-
-            <!-- BÁO CÁO -->
-            <td class="text-end">
-
-              <a
-                class="btn btn-sm btn-outline-primary"
-                href="{% url 'teacher_exam_report' exam.id %}"
-                title="Xem kết quả lớp"
-              >
-
-                <i class="bi bi-eye"></i>
-
-                <span class="visually-hidden">
-                  Xem kết quả
+              <!-- TÊN BÀI THI -->
+              <td>
+                <span class="exam-name">
+                  {{ exam.title }}
                 </span>
 
-              </a>
-
-
-              <a
-                class="btn btn-sm btn-primary"
-                href="{% url 'teacher_exam_pdf' exam.id %}"
-                title="Tải báo cáo PDF"
-              >
-
-                <i class="bi bi-file-earmark-pdf"></i>
-
-                <span class="visually-hidden">
-                  Tải PDF
+                <span class="exam-paper-count">
+                  <i class="bi bi-files me-1"></i>
+                  {{ exam.number_of_papers }} mã đề
                 </span>
+              </td>
 
-              </a>
+              <!-- THỜI GIAN -->
+              <td>
+                <div class="exam-time">
+                  <div>
+                    <i class="bi bi-calendar-event"></i>
+                    {{ exam.start_time|date:"d/m/Y H:i" }}
+                  </div>
 
-            </td>
+                  <div>
+                    <i class="bi bi-arrow-right"></i>
+                    {{ exam.end_time|date:"d/m/Y H:i" }}
+                  </div>
+                </div>
+              </td>
 
-          </tr>
+              <!-- THỜI LƯỢNG -->
+              <td>
+                <span class="exam-duration">
+                  <i class="bi bi-stopwatch"></i>
+                  {{ exam.duration_minutes }} phút
+                </span>
+              </td>
 
+              <!-- THAO TÁC -->
+              <td>
+                <div class="report-actions">
 
-          {% empty %}
+                  <a
+                    class="report-btn report-btn-view"
+                    href="{% url 'teacher_exam_report' exam.id %}"
+                    title="Xem kết quả lớp"
+                    aria-label="Xem kết quả bài thi {{ exam.title }}"
+                  >
+                    <i class="bi bi-eye"></i>
+                    <span>Xem kết quả</span>
+                  </a>
 
-          <tr>
+                  <a
+                    class="report-btn report-btn-pdf"
+                    href="{% url 'teacher_exam_pdf' exam.id %}"
+                    title="Tải báo cáo PDF"
+                    aria-label="Tải báo cáo PDF bài thi {{ exam.title }}"
+                  >
+                    <i class="bi bi-file-earmark-pdf"></i>
+                    <span>Tải PDF</span>
+                  </a>
 
-            <td
-              colspan="4"
-              class="text-muted py-4"
-            >
-              Lớp chưa có bài thi.
-            </td>
+                </div>
+              </td>
 
-          </tr>
+            </tr>
 
-          {% endfor %}
+            {% empty %}
 
-        </tbody>
+            <tr>
+              <td colspan="4" class="exam-empty-cell">
+                <i class="bi bi-journal-x"></i>
+                <p>Lớp học phần này chưa có bài thi.</p>
+              </td>
+            </tr>
 
-      </table>
+            {% endfor %}
 
+          </tbody>
+        </table>
+
+      </div>
     </div>
 
   </section>
 
-
   {% empty %}
 
-  <p class="empty-state">
-    Bạn chưa được phân công lớp học phần nào.
-  </p>
+  <!-- CHƯA ĐƯỢC PHÂN CÔNG LỚP -->
+  <section class="empty-state">
+    <div class="empty-state-icon">
+      <i class="bi bi-mortarboard"></i>
+    </div>
+
+    <h2>Chưa có lớp học phần</h2>
+
+    <p>
+      Bạn chưa được phân công lớp học phần nào.
+      Vui lòng liên hệ quản trị viên nếu bạn cho rằng thông tin
+      phân công giảng dạy chưa chính xác.
+    </p>
+  </section>
 
   {% endfor %}
 

@@ -1907,3 +1907,34 @@ class ExamSessionAdmin(admin.ModelAdmin):
                 level=messages.SUCCESS,
             )
     create_exam_computers.short_description = "Tạo danh sách máy và tự động xếp sinh viên"
+
+
+
+
+from django.contrib import admin
+from .models import FaceProfile
+
+
+@admin.register(FaceProfile)
+class FaceProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "user_profile",
+        "model_name",
+        "is_active",
+        "registered_at",
+    )
+
+    list_filter = ("is_active", "model_name")
+
+    search_fields = (
+        "user_profile__user__username",
+        "user_profile__student_id",
+        "user_profile__lecturer_id",
+    )
+
+    readonly_fields = (
+        "registered_at",
+        "updated_at",
+        "consented_at",
+    )

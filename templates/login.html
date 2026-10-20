@@ -1,32 +1,740 @@
 {% extends "base.html" %}
 
 {% block body_block %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6 text-center">
-            <h2 class="mb-4">Đăng nhập hệ thống (Sinh viên)</h2>
-            <p class="text-muted">Đưa mã QR của bạn vào khung camera bên dưới để đăng nhập.</p>
-            
-            <!-- Khung chứa camera -->
-            <div id="reader" style="width: 100%; max-width: 500px; margin: 0 auto; border-radius: 10px; overflow: hidden;"></div>
-            
-            <div id="status-message" class="mt-3 fw-bold"></div>
+<style>
+    .auth-page {
+        --auth-primary: #155eef;
+        --auth-primary-dark: #1249c7;
+        --auth-ink: #172b4d;
+        --auth-muted: #667085;
+        --auth-border: #e4eaf2;
+        min-height: calc(100vh - 120px);
+        padding: 38px 16px 56px;
+        background:
+            radial-gradient(circle at 12% 8%, rgba(21, 94, 239, .10), transparent 28%),
+            radial-gradient(circle at 88% 82%, rgba(14, 165, 233, .10), transparent 25%),
+            #f5f8fc;
+    }
+
+    .auth-shell {
+        max-width: 1080px;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid rgba(228, 234, 242, .9);
+        border-radius: 24px;
+        background: #fff;
+        box-shadow: 0 24px 70px rgba(16, 36, 68, .12);
+    }
+
+    .auth-brand-panel {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 660px;
+        padding: 42px;
+        overflow: hidden;
+        color: #fff;
+        background: linear-gradient(145deg, #073763 0%, #0756a5 55%, #147de1 100%);
+    }
+
+    .auth-brand-panel::before,
+    .auth-brand-panel::after {
+        position: absolute;
+        content: "";
+        border: 1px solid rgba(255, 255, 255, .14);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+
+    .auth-brand-panel::before {
+        width: 390px;
+        height: 390px;
+        right: -160px;
+        top: -95px;
+    }
+
+    .auth-brand-panel::after {
+        width: 300px;
+        height: 300px;
+        right: -90px;
+        top: -48px;
+    }
+
+    .brand-content,
+    .brand-footer {
+        position: relative;
+        z-index: 1;
+    }
+
+    .brand-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 58px;
+        height: 58px;
+        margin-bottom: 28px;
+        border: 1px solid rgba(255,255,255,.28);
+        border-radius: 17px;
+        background: rgba(255,255,255,.13);
+        font-size: 25px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    }
+
+    .brand-eyebrow {
+        margin-bottom: 12px;
+        color: #cfe5ff;
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+    }
+
+    .brand-title {
+        max-width: 390px;
+        margin: 0 0 18px;
+        font-size: clamp(2rem, 3vw, 2.8rem);
+        font-weight: 800;
+        line-height: 1.13;
+        letter-spacing: -.045em;
+    }
+
+    .brand-description {
+        max-width: 390px;
+        color: rgba(255,255,255,.82);
+        font-size: 1rem;
+        line-height: 1.8;
+    }
+
+    .brand-benefits {
+        display: grid;
+        gap: 15px;
+        margin-top: 36px;
+    }
+
+    .brand-benefit {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: rgba(255,255,255,.92);
+        font-size: .93rem;
+    }
+
+    .benefit-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 28px;
+        width: 28px;
+        height: 28px;
+        border: 1px solid rgba(255,255,255,.25);
+        border-radius: 9px;
+        background: rgba(255,255,255,.13);
+        font-weight: 800;
+    }
+
+    .brand-footer {
+        margin-top: 45px;
+        color: rgba(255,255,255,.65);
+        font-size: .78rem;
+    }
+
+    .auth-form-panel {
+        padding: 42px clamp(22px, 4vw, 54px);
+    }
+
+    .auth-mobile-brand {
+        display: none;
+        color: #0b4c87;
+        font-weight: 800;
+    }
+
+    .auth-heading {
+        margin-bottom: 8px;
+        color: var(--auth-ink);
+        font-size: clamp(1.7rem, 2.5vw, 2.15rem);
+        font-weight: 800;
+        letter-spacing: -.04em;
+    }
+
+    .auth-subheading {
+        margin-bottom: 27px;
+        color: var(--auth-muted);
+        line-height: 1.7;
+    }
+
+    .auth-mode-switch {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        padding: 5px;
+        margin-bottom: 26px;
+        border: 1px solid var(--auth-border);
+        border-radius: 14px;
+        background: #f4f7fb;
+    }
+
+    .auth-mode-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        min-height: 47px;
+        padding: 10px 12px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: #667085;
+        font-size: .92rem;
+        font-weight: 700;
+        transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+    }
+
+    .auth-mode-button.active {
+        background: #fff;
+        color: var(--auth-primary);
+        box-shadow: 0 3px 12px rgba(16, 36, 68, .09);
+    }
+
+    .auth-mode-button:focus-visible,
+    .auth-primary-button:focus-visible,
+    .auth-secondary-button:focus-visible {
+        outline: 3px solid rgba(21, 94, 239, .25);
+        outline-offset: 2px;
+    }
+
+    .auth-mode-panel[hidden] {
+        display: none !important;
+    }
+
+    .auth-section-title {
+        margin-bottom: 7px;
+        color: var(--auth-ink);
+        font-size: 1.05rem;
+        font-weight: 800;
+    }
+
+    .auth-section-description {
+        margin-bottom: 18px;
+        color: var(--auth-muted);
+        font-size: .9rem;
+        line-height: 1.65;
+    }
+
+    .camera-frame {
+        position: relative;
+        min-height: 260px;
+        overflow: hidden;
+        border: 1px solid #dce5f0;
+        border-radius: 18px;
+        background: #101828;
+    }
+
+    #reader {
+        width: 100%;
+        min-height: 260px;
+        border: 0 !important;
+        border-radius: 18px;
+        overflow: hidden;
+        background: #f8fafc;
+    }
+
+    #reader video {
+        border-radius: 12px;
+        object-fit: cover;
+    }
+
+    #reader img {
+        max-width: 100%;
+    }
+
+    #reader__scan_region {
+        min-height: 220px;
+    }
+
+    #reader__dashboard {
+        padding: 12px !important;
+        background: #fff;
+    }
+
+    #reader__dashboard button,
+    #reader__dashboard select {
+        margin: 4px;
+        padding: 8px 12px;
+        border: 1px solid #d0d5dd;
+        border-radius: 9px;
+        background: #fff;
+        color: #344054;
+    }
+
+    #face-video {
+        display: block;
+        width: 100%;
+        min-height: 260px;
+        max-height: 350px;
+        object-fit: cover;
+        background: #101828;
+        transform: scaleX(-1);
+    }
+
+    .camera-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 260px;
+        padding: 28px;
+        color: #d0d5dd;
+        text-align: center;
+    }
+
+    .camera-placeholder .camera-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 58px;
+        height: 58px;
+        margin-bottom: 14px;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 18px;
+        background: rgba(255,255,255,.08);
+        font-size: 25px;
+    }
+
+    .camera-placeholder strong {
+        margin-bottom: 5px;
+        color: #fff;
+    }
+
+    .camera-placeholder span {
+        max-width: 260px;
+        color: #cbd5e1;
+        font-size: .84rem;
+        line-height: 1.6;
+    }
+
+    .face-camera-stage {
+        position: relative;
+        overflow: hidden;
+        border-radius: 18px;
+        background: #101828;
+    }
+
+    .face-camera-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .face-guide {
+        width: min(54%, 190px);
+        height: 70%;
+        border: 2px dashed rgba(255,255,255,.78);
+        border-radius: 48% 48% 44% 44%;
+        box-shadow: 0 0 0 999px rgba(16, 24, 40, .12);
+    }
+
+    .camera-status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin-right: 7px;
+        border-radius: 50%;
+        background: #98a2b3;
+    }
+
+    .camera-status-dot.live {
+        background: #12b76a;
+        box-shadow: 0 0 0 4px rgba(18,183,106,.14);
+    }
+
+    .auth-primary-button,
+    .auth-secondary-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        min-height: 46px;
+        padding: 11px 17px;
+        border-radius: 11px;
+        font-weight: 750;
+        transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+
+    .auth-primary-button {
+        border: 1px solid var(--auth-primary);
+        background: var(--auth-primary);
+        color: #fff;
+        box-shadow: 0 5px 12px rgba(21,94,239,.17);
+    }
+
+    .auth-primary-button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        border-color: var(--auth-primary-dark);
+        background: var(--auth-primary-dark);
+        color: #fff;
+    }
+
+    .auth-secondary-button {
+        border: 1px solid #d0d5dd;
+        background: #fff;
+        color: #344054;
+    }
+
+    .auth-secondary-button:hover:not(:disabled) {
+        background: #f8fafc;
+        color: #172b4d;
+    }
+
+    .auth-primary-button:disabled,
+    .auth-secondary-button:disabled {
+        cursor: not-allowed;
+        opacity: .55;
+        box-shadow: none;
+    }
+
+    .auth-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .auth-status {
+        display: none;
+        padding: 12px 14px;
+        margin-top: 16px;
+        border: 1px solid transparent;
+        border-radius: 11px;
+        font-size: .9rem;
+        line-height: 1.6;
+    }
+
+    .auth-status.show {
+        display: block;
+    }
+
+    .auth-status.info {
+        border-color: #b2ddff;
+        background: #eff8ff;
+        color: #175cd3;
+    }
+
+    .auth-status.success {
+        border-color: #abefc6;
+        background: #ecfdf3;
+        color: #067647;
+    }
+
+    .auth-status.error {
+        border-color: #fecdca;
+        background: #fef3f2;
+        color: #b42318;
+    }
+
+    .auth-consent {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 13px;
+        margin-top: 16px;
+        border: 1px solid #e4eaf2;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: #475467;
+        font-size: .84rem;
+        line-height: 1.6;
+    }
+
+    .auth-consent input {
+        flex: 0 0 auto;
+        width: 17px;
+        height: 17px;
+        margin-top: 3px;
+        accent-color: var(--auth-primary);
+    }
+
+    .auth-privacy-note {
+        display: flex;
+        gap: 9px;
+        padding: 13px 0 0;
+        color: #667085;
+        font-size: .8rem;
+        line-height: 1.65;
+    }
+
+    .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 22px 0 15px;
+        color: #98a2b3;
+        font-size: .78rem;
+    }
+
+    .auth-divider::before,
+    .auth-divider::after {
+        height: 1px;
+        flex: 1;
+        background: #eaecf0;
+        content: "";
+    }
+
+    .auth-help {
+        color: #667085;
+        font-size: .83rem;
+        line-height: 1.7;
+    }
+
+    .auth-help a {
+        color: var(--auth-primary);
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .auth-help a:hover {
+        text-decoration: underline;
+    }
+
+    @media (max-width: 767.98px) {
+        .auth-page {
+            padding: 18px 10px 30px;
+        }
+
+        .auth-shell {
+            border-radius: 18px;
+        }
+
+        .auth-brand-panel {
+            display: none;
+        }
+
+        .auth-form-panel {
+            padding: 28px 19px 30px;
+        }
+
+        .auth-mobile-brand {
+            display: block;
+            margin-bottom: 22px;
+        }
+
+        .auth-heading {
+            font-size: 1.7rem;
+        }
+
+        .auth-mode-button {
+            gap: 6px;
+            padding: 9px 6px;
+            font-size: .84rem;
+        }
+
+        .auth-actions > button {
+            flex: 1 1 100%;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .auth-mode-button,
+        .auth-primary-button,
+        .auth-secondary-button {
+            transition: none;
+        }
+    }
+</style>
+
+<form id="csrf-token-form" hidden>{% csrf_token %}</form>
+<div class="auth-page">
+    <div class="auth-shell">
+        <div class="row g-0">
+            <!-- Cột giới thiệu thương hiệu -->
+            <div class="col-md-5">
+                <aside class="auth-brand-panel">
+                    <div class="brand-content">
+                        <div class="brand-mark" aria-label="STU">STU</div>
+                        <div class="brand-eyebrow">STU Online Examination</div>
+                        <h1 class="brand-title">Không gian thi trực tuyến của bạn.</h1>
+                        <p class="brand-description">
+                            Đăng nhập an toàn, thuận tiện để truy cập khóa học,
+                            bài thi và kết quả học tập tại hệ thống STU.
+                        </p>
+
+                        <div class="brand-benefits">
+                            <div class="brand-benefit">
+                                <span class="benefit-check">✓</span>
+                                <span>Đăng nhập nhanh bằng mã QR cá nhân</span>
+                            </div>
+                            <div class="brand-benefit">
+                                <span class="benefit-check">✓</span>
+                                <span>Hỗ trợ xác thực bằng khuôn mặt đã đăng ký</span>
+                            </div>
+                            <div class="brand-benefit">
+                                <span class="benefit-check">✓</span>
+                                <span>Giao diện tối ưu cho máy tính và điện thoại</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="brand-footer">
+                        © {% now "Y" %} STU Online Examination · Hệ thống thi trực tuyến
+                    </div>
+                </aside>
+            </div>
+
+            <!-- Khu vực đăng nhập -->
+            <div class="col-md-7">
+                <main class="auth-form-panel">
+                    <div class="auth-mobile-brand">STU · ONLINE EXAMINATION</div>
+
+                    <div class="mb-1">
+                        <div class="auth-heading">Chào mừng trở lại</div>
+                        <p class="auth-subheading">
+                            Chọn phương thức xác thực để tiếp tục vào hệ thống.
+                        </p>
+                    </div>
+
+                    <div class="auth-mode-switch" role="tablist" aria-label="Phương thức đăng nhập">
+                        <button
+                            type="button"
+                            id="mode-qr-button"
+                            class="auth-mode-button active"
+                            role="tab"
+                            aria-selected="true"
+                            aria-controls="qr-panel"
+                        >
+                            <span aria-hidden="true">▦</span>
+                            <span>Đăng nhập QR</span>
+                        </button>
+                        <button
+                            type="button"
+                            id="mode-face-button"
+                            class="auth-mode-button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="face-panel"
+                        >
+                            <span aria-hidden="true">◎</span>
+                            <span>Khuôn mặt</span>
+                        </button>
+                    </div>
+
+                    <!-- ================= QR LOGIN: GIỮ NGUYÊN API CŨ ================= -->
+                    <section id="qr-panel" class="auth-mode-panel" role="tabpanel" aria-labelledby="mode-qr-button">
+                        <h2 class="auth-section-title">Quét mã QR cá nhân</h2>
+                        <p class="auth-section-description">
+                            Đưa mã QR tài khoản vào giữa khung camera. Hệ thống sẽ xác thực tự động.
+                        </p>
+
+                        <div class="camera-frame">
+                            <div id="reader"></div>
+                        </div>
+
+                        <div class="d-flex align-items-center mt-3 small text-secondary">
+                            <span id="qr-status-dot" class="camera-status-dot"></span>
+                            <span id="status-message" role="status" aria-live="polite">
+                                Đang chuẩn bị máy quét QR…
+                            </span>
+                        </div>
+
+                        <div id="qr-error-message" class="auth-status error" role="alert"></div>
+
+                        <div class="auth-divider">LƯU Ý</div>
+                        <p class="auth-help mb-0">
+                            Cho phép trình duyệt sử dụng camera khi được hỏi. Nếu không thể quét,
+                            hãy kiểm tra quyền camera và thử lại.
+                        </p>
+                    </section>
+
+                    <!-- ================= FACE LOGIN ================= -->
+                    <section id="face-panel" class="auth-mode-panel" role="tabpanel" aria-labelledby="mode-face-button" hidden>
+                        <h2 class="auth-section-title">Xác thực bằng khuôn mặt</h2>
+                        <p class="auth-section-description">
+                            Sử dụng camera để chụp khuôn mặt đã đăng ký trong hồ sơ cá nhân.
+                        </p>
+
+                        <div class="camera-frame">
+                            <div id="face-placeholder" class="camera-placeholder">
+                                <div class="camera-icon" aria-hidden="true">◎</div>
+                                <strong>Camera chưa được bật</strong>
+                                <span>Nhấn “Bật camera” và nhìn thẳng vào camera trong điều kiện đủ sáng.</span>
+                            </div>
+                            <div id="face-camera-stage" class="face-camera-stage" hidden>
+                                <video id="face-video" autoplay playsinline muted></video>
+                                <div class="face-camera-overlay" aria-hidden="true">
+                                    <div class="face-guide"></div>
+                                </div>
+                            </div>
+                            <canvas id="face-canvas" hidden></canvas>
+                        </div>
+
+                        <div class="d-flex align-items-center mt-3 small text-secondary">
+                            <span id="face-status-dot" class="camera-status-dot"></span>
+                            <span id="face-camera-status" role="status" aria-live="polite">Camera chưa được bật.</span>
+                        </div>
+
+                        <label class="auth-consent" for="face-login-consent">
+                            <input type="checkbox" id="face-login-consent">
+                            <span>
+                                Tôi đồng ý sử dụng hình ảnh khuôn mặt trong lần đăng nhập này để
+                                đối chiếu với hồ sơ đã đăng ký. Ảnh chụp chỉ được gửi để xử lý
+                                xác thực, không được lưu thành ảnh hồ sơ trong chức năng này.
+                            </span>
+                        </label>
+
+                        <div class="auth-actions">
+                            <button type="button" id="face-start-camera" class="auth-secondary-button">
+                                <span aria-hidden="true">◉</span> Bật camera
+                            </button>
+                            <button type="button" id="face-login-button" class="auth-primary-button" disabled>
+                                <span aria-hidden="true">✓</span> Xác thực và đăng nhập
+                            </button>
+                            <button type="button" id="face-stop-camera" class="auth-secondary-button" disabled>
+                                Tắt camera
+                            </button>
+                        </div>
+
+                        <div id="face-status-message" class="auth-status" role="status" aria-live="polite"></div>
+
+                        <div class="auth-privacy-note">
+                            <span aria-hidden="true">ⓘ</span>
+                            <span>
+                                Chỉ tài khoản đã đăng ký khuôn mặt và đang hoạt động mới có thể
+                                đăng nhập bằng phương thức này. Nếu chưa đăng ký, hãy đăng nhập
+                                bằng QR rồi đăng ký tại Hồ sơ cá nhân.
+                            </span>
+                        </div>
+                    </section>
+
+                    <div class="auth-divider">HỖ TRỢ</div>
+                    <p class="auth-help mb-0">
+                        Không đăng nhập được?
+                        <span>Hãy thử lại với mã QR cá nhân hoặc liên hệ quản trị viên hệ thống.</span>
+                    </p>
+                </main>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Thư viện quét QR -->
+<!-- Thư viện quét QR cũ -->
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
 <script>
-    // Hàm lấy CSRF Token để gửi kèm request POST của Django
+(() => {
+    "use strict";
+
+    // Lấy CSRF token của Django. Fallback từ input nếu cookie không có.
     function getCookie(name) {
         let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
             for (let i = 0; i < cookies.length; i++) {
                 const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                if (cookie.substring(0, name.length + 1) === (name + "=")) {
                     cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                     break;
                 }
@@ -34,58 +742,381 @@
         }
         return cookieValue;
     }
-    const csrftoken = getCookie('csrftoken');
 
-    // Hàm xử lý khi quét QR thành công
-    function onScanSuccess(decodedText, decodedResult) {
-        // Dừng máy quét sau khi quét thành công để tránh gửi request liên tục
-        html5QrcodeScanner.clear();
-        
-        const statusDiv = document.getElementById('status-message');
-        statusDiv.innerHTML = '<span class="text-primary">Đang xác thực mã QR...</span>';
+    function getCsrfToken() {
+        const cookieToken = getCookie("csrftoken");
+        if (cookieToken) return cookieToken;
 
-        // Gửi token quét được lên server
-        fetch('{% url "verify_qr_login" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrftoken
-            },
-            body: JSON.stringify({ qr_token: decodedText })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                statusDiv.innerHTML = `<span class="text-success">${data.message} Đang chuyển hướng...</span>`;
-                // Chuyển hướng người dùng qua trang bài thi / trang chủ
-                setTimeout(() => {
-                    window.location.href = data.redirect_url;
-                }, 1500);
-            } else {
-                statusDiv.innerHTML = `<span class="text-danger">Lỗi: ${data.message}</span>`;
-                // Khởi động lại máy quét nếu thất bại
-                setTimeout(() => { location.reload(); }, 3000);
+        const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+        return csrfInput ? csrfInput.value : "";
+    }
+
+    const qrPanel = document.getElementById("qr-panel");
+    const facePanel = document.getElementById("face-panel");
+    const qrModeButton = document.getElementById("mode-qr-button");
+    const faceModeButton = document.getElementById("mode-face-button");
+
+    const qrStatus = document.getElementById("status-message");
+    const qrError = document.getElementById("qr-error-message");
+    const qrStatusDot = document.getElementById("qr-status-dot");
+
+    const faceVideo = document.getElementById("face-video");
+    const faceCanvas = document.getElementById("face-canvas");
+    const facePlaceholder = document.getElementById("face-placeholder");
+    const faceCameraStage = document.getElementById("face-camera-stage");
+    const faceCameraStatus = document.getElementById("face-camera-status");
+    const faceStatusDot = document.getElementById("face-status-dot");
+    const faceStatusMessage = document.getElementById("face-status-message");
+    const faceConsent = document.getElementById("face-login-consent");
+    const faceStartButton = document.getElementById("face-start-camera");
+    const faceLoginButton = document.getElementById("face-login-button");
+    const faceStopButton = document.getElementById("face-stop-camera");
+
+    let html5QrcodeScanner = null;
+    let qrStarted = false;
+    let qrStarting = false;
+    let qrAuthenticated = false;
+    let faceStream = null;
+    let faceRequestInProgress = false;
+    let activeMode = "qr";
+
+    function showStatus(element, message, type) {
+        element.textContent = message;
+        element.className = "auth-status show " + type;
+    }
+
+    function clearStatus(element) {
+        element.textContent = "";
+        element.className = "auth-status";
+    }
+
+    function setQrStatus(message, live = false) {
+        qrStatus.textContent = message;
+        qrStatusDot.classList.toggle("live", live);
+    }
+
+    function setFaceCameraStatus(message, live = false) {
+        faceCameraStatus.textContent = message;
+        faceStatusDot.classList.toggle("live", live);
+    }
+
+    // Dừng toàn bộ track webcam khuôn mặt.
+    function stopFaceCamera() {
+        if (faceStream) {
+            faceStream.getTracks().forEach(track => track.stop());
+            faceStream = null;
+        }
+
+        faceVideo.pause();
+        faceVideo.srcObject = null;
+        faceCameraStage.hidden = true;
+        facePlaceholder.hidden = false;
+        faceStartButton.disabled = false;
+        faceStopButton.disabled = true;
+        faceLoginButton.disabled = true;
+        setFaceCameraStatus("Camera đã tắt.");
+    }
+
+    // Dừng máy quét QR trước khi chuyển sang chế độ khuôn mặt.
+    async function stopQrScanner() {
+        if (!html5QrcodeScanner || !qrStarted) {
+            return;
+        }
+
+        try {
+            await html5QrcodeScanner.clear();
+        } catch (error) {
+            console.warn("Không thể dừng máy quét QR một cách bình thường:", error);
+        } finally {
+            qrStarted = false;
+            html5QrcodeScanner = null;
+            qrStarting = false;
+            qrStatusDot.classList.remove("live");
+        }
+    }
+
+    async function startQrScanner() {
+        if (activeMode !== "qr" || qrStarted || qrStarting || qrAuthenticated) {
+            return;
+        }
+
+        if (!window.Html5QrcodeScanner) {
+            setQrStatus("Không tải được thư viện quét QR. Hãy kiểm tra kết nối Internet.");
+            showStatus(qrError, "Không thể tải thư viện html5-qrcode. Hãy kiểm tra kết nối Internet rồi tải lại trang.", "error");
+            return;
+        }
+
+        qrStarting = true;
+        clearStatus(qrError);
+        setQrStatus("Đang khởi tạo camera QR…");
+
+        try {
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader",
+                {
+                    fps: 10,
+                    qrbox: { width: 220, height: 220 },
+                    aspectRatio: 1.0,
+                    rememberLastUsedCamera: true
+                },
+                false
+            );
+
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+            qrStarted = true;
+            setQrStatus("Hướng camera vào mã QR cá nhân.", true);
+        } catch (error) {
+            console.error("Không thể khởi động máy quét QR:", error);
+            setQrStatus("Không thể khởi động camera QR.");
+            showStatus(qrError, "Trình duyệt không thể khởi động camera QR. Hãy kiểm tra quyền camera và tải lại trang.", "error");
+        } finally {
+            qrStarting = false;
+        }
+    }
+
+    // Luồng QR cũ: giữ nguyên endpoint, body và cách kiểm tra status.
+    async function onScanSuccess(decodedText) {
+        if (qrAuthenticated || activeMode !== "qr") return;
+
+        qrAuthenticated = true;
+        setQrStatus("Đang xác thực mã QR…");
+        clearStatus(qrError);
+
+        try {
+            if (html5QrcodeScanner) {
+                try {
+                    await html5QrcodeScanner.clear();
+                } catch (error) {
+                    console.warn("Không thể dừng QR scanner:", error);
+                }
+                qrStarted = false;
+                html5QrcodeScanner = null;
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            statusDiv.innerHTML = '<span class="text-danger">Lỗi kết nối tới máy chủ.</span>';
-        });
+
+            const response = await fetch('{% url "verify_qr_login" %}', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCsrfToken()
+                },
+                body: JSON.stringify({ qr_token: decodedText })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                setQrStatus(data.message || "Đăng nhập thành công.");
+                showStatus(qrError, (data.message || "Đăng nhập thành công.") + " Đang chuyển hướng…", "success");
+                window.setTimeout(() => {
+                    window.location.href = data.redirect_url || "/";
+                }, 900);
+            } else {
+                qrAuthenticated = false;
+                const message = "Lỗi: " + (data.message || "Mã QR không hợp lệ.");
+                setQrStatus(message);
+                showStatus(qrError, message, "error");
+                // Cho phép người dùng thử lại mà không tải lại toàn bộ trang.
+                window.setTimeout(() => {
+                    if (activeMode === "qr") startQrScanner();
+                }, 1800);
+            }
+        } catch (error) {
+            console.error("Lỗi xác thực QR:", error);
+            qrAuthenticated = false;
+            setQrStatus("Không thể kết nối tới máy chủ.");
+            showStatus(qrError, "Lỗi kết nối tới máy chủ. Vui lòng thử quét lại.", "error");
+            window.setTimeout(() => {
+                if (activeMode === "qr") startQrScanner();
+            }, 1800);
+        }
     }
 
     function onScanFailure(error) {
-        // Bỏ qua lỗi quét liên tục (do camera bắt khung hình liên tục)
-        // console.warn(`Code scan error = ${error}`);
+        // html5-qrcode phát sinh nhiều lỗi nhỏ khi chưa nhận được QR; bỏ qua.
     }
 
-    // Khởi tạo html5QrcodeScanner
-    let html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: {width: 250, height: 250} },
-        /* verbose= */ false
-    );
-    
-    // Yêu cầu quyền camera và bắt đầu quét
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    async function switchMode(mode) {
+        if (mode === activeMode) return;
+
+        activeMode = mode;
+        clearStatus(qrError);
+        clearStatus(faceStatusMessage);
+
+        const isQr = mode === "qr";
+        qrPanel.hidden = !isQr;
+        facePanel.hidden = isQr;
+
+        qrModeButton.classList.toggle("active", isQr);
+        faceModeButton.classList.toggle("active", !isQr);
+        qrModeButton.setAttribute("aria-selected", String(isQr));
+        faceModeButton.setAttribute("aria-selected", String(!isQr));
+
+        if (isQr) {
+            stopFaceCamera();
+            await startQrScanner();
+        } else {
+            await stopQrScanner();
+            setQrStatus("Máy quét QR đã tạm dừng.");
+            setFaceCameraStatus("Nhấn “Bật camera” để bắt đầu.");
+        }
+    }
+
+    qrModeButton.addEventListener("click", () => switchMode("qr"));
+    faceModeButton.addEventListener("click", () => switchMode("face"));
+
+    async function startFaceCamera() {
+        if (faceStream) return;
+
+        clearStatus(faceStatusMessage);
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showStatus(
+                faceStatusMessage,
+                "Trình duyệt không hỗ trợ webcam hoặc trang không chạy trong ngữ cảnh bảo mật. Hãy dùng localhost/HTTPS và trình duyệt mới.",
+                "error"
+            );
+            return;
+        }
+
+        faceStartButton.disabled = true;
+        setFaceCameraStatus("Đang yêu cầu quyền sử dụng camera…");
+
+        try {
+            faceStream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    facingMode: "user",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            });
+
+            faceVideo.srcObject = faceStream;
+            facePlaceholder.hidden = true;
+            faceCameraStage.hidden = false;
+
+            await faceVideo.play();
+
+            faceStopButton.disabled = false;
+            faceLoginButton.disabled = !faceConsent.checked;
+            setFaceCameraStatus("Camera đang hoạt động. Hãy nhìn thẳng vào khung hướng dẫn.", true);
+        } catch (error) {
+            console.error("Lỗi mở webcam khuôn mặt:", error);
+            stopFaceCamera();
+
+            let message = "Không thể mở camera. Hãy kiểm tra quyền truy cập camera.";
+            if (error && (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")) {
+                message = "Bạn đã từ chối quyền camera. Hãy cho phép camera trong cài đặt trình duyệt rồi thử lại.";
+            } else if (error && (error.name === "NotFoundError" || error.name === "DevicesNotFoundError")) {
+                message = "Không tìm thấy camera trên thiết bị.";
+            } else if (error && error.name === "NotReadableError") {
+                message = "Camera có thể đang được ứng dụng khác sử dụng. Hãy đóng ứng dụng đó rồi thử lại.";
+            }
+
+            showStatus(faceStatusMessage, message, "error");
+        }
+    }
+
+    faceStartButton.addEventListener("click", startFaceCamera);
+    faceStopButton.addEventListener("click", stopFaceCamera);
+
+    faceConsent.addEventListener("change", () => {
+        faceLoginButton.disabled = !faceStream || !faceConsent.checked || faceRequestInProgress;
+    });
+
+    async function verifyFaceLogin() {
+        if (faceRequestInProgress) return;
+
+        if (!faceConsent.checked) {
+            showStatus(faceStatusMessage, "Vui lòng đồng ý sử dụng khuôn mặt để đăng nhập.", "error");
+            return;
+        }
+
+        if (!faceStream || !faceVideo.videoWidth || !faceVideo.videoHeight) {
+            showStatus(faceStatusMessage, "Hãy bật camera và chờ hình ảnh hiển thị trước khi xác thực.", "error");
+            return;
+        }
+
+        faceRequestInProgress = true;
+        faceLoginButton.disabled = true;
+        faceStartButton.disabled = true;
+        showStatus(faceStatusMessage, "Đang chụp ảnh và xác thực khuôn mặt. Vui lòng chờ…", "info");
+
+        try {
+            // Ảnh chỉ nằm trong bộ nhớ trình duyệt và được gửi để xử lý xác thực.
+            faceCanvas.width = faceVideo.videoWidth;
+            faceCanvas.height = faceVideo.videoHeight;
+
+            const context = faceCanvas.getContext("2d");
+            context.save();
+            context.translate(faceCanvas.width, 0);
+            context.scale(-1, 1);
+            context.drawImage(faceVideo, 0, 0, faceCanvas.width, faceCanvas.height);
+            context.restore();
+
+            const imageData = faceCanvas.toDataURL("image/jpeg", 0.88);
+
+            const response = await fetch('{% url "verify_face_login" %}', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCsrfToken()
+                },
+                body: JSON.stringify({
+                    consent: true,
+                    image: imageData
+                })
+            });
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (_) {
+                throw new Error("Máy chủ trả về dữ liệu không hợp lệ. Hãy kiểm tra log Django.");
+            }
+
+            if (response.ok && data.success) {
+                showStatus(
+                    faceStatusMessage,
+                    (data.message || "Đăng nhập thành công.") + " Đang chuyển hướng…",
+                    "success"
+                );
+                stopFaceCamera();
+                window.setTimeout(() => {
+                    window.location.href = data.redirect_url || "/";
+                }, 900);
+            } else {
+                const message = data.message || "Không thể xác thực khuôn mặt.";
+                showStatus(faceStatusMessage, message, "error");
+                faceRequestInProgress = false;
+                faceLoginButton.disabled = !faceStream || !faceConsent.checked;
+                faceStartButton.disabled = false;
+            }
+        } catch (error) {
+            console.error("Lỗi đăng nhập khuôn mặt:", error);
+            showStatus(
+                faceStatusMessage,
+                error.message || "Không thể kết nối tới máy chủ. Vui lòng thử lại.",
+                "error"
+            );
+            faceRequestInProgress = false;
+            faceLoginButton.disabled = !faceStream || !faceConsent.checked;
+            faceStartButton.disabled = false;
+        }
+    }
+
+    faceLoginButton.addEventListener("click", verifyFaceLogin);
+
+    // Dừng camera khi rời trang để không giữ webcam chạy nền.
+    window.addEventListener("pagehide", () => {
+        stopFaceCamera();
+        if (html5QrcodeScanner && qrStarted) {
+            html5QrcodeScanner.clear().catch(() => {});
+        }
+    });
+
+    // Mặc định giữ hành vi cũ: mở trang là hiển thị và khởi động quét QR.
+    startQrScanner();
+})();
 </script>
 {% endblock %}

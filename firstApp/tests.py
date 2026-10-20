@@ -5,7 +5,8 @@ import shutil
 import subprocess
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-
+import base64
+from io import BytesIO
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.staticfiles import finders
@@ -26,6 +27,7 @@ from .models import (
     Exam,
     ExamComputer,
     ExamSession,
+    FaceProfile,
     ProctorEvent,
     StudentAnswer,
     StudentExam,
@@ -2050,6 +2052,36 @@ class AcademicStructureTests(TestCase):
             )
         )
 
+    def test_unassigned_lecturer_cannot_download_exam_pdf(self):
+        lecturer = self.create_profile(
+            "unassigned-pdf-lecturer",
+            "lecturer",
+        )
+
+        offering = self.create_active_offering(
+            group_code="NMLT-PDF-PRIVATE",
+            session_number=1,
+        )
+
+        # Cố ý không tạo TeachingAssignment
+        # cho lecturer đối với offering này.
+        exam = self.create_exam(offering)
+
+        client = Client()
+        client.force_login(lecturer.user)
+
+        response = client.get(
+            reverse(
+                "teacher_exam_pdf",
+                args=(exam.pk,),
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            404,
+        )
+
     # ==========================================================
     # 20. TEACHER RESULTS ONLY ASSIGNED CLASSES
     # ==========================================================
@@ -2534,3 +2566,1290 @@ class AcademicStructureTests(TestCase):
             computer.absence_reviewed_by,
             lecturer.user,
         )
+class StudentExamProctoringControlTests(TestCase):
+    def setUp(self):
+        self.course = Course.objects.create(
+            code="KTLT101",
+            name="Kỹ thuật lập trình",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="KTLT-CA1",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.lecturer = User.objects.create_user(
+            username="lecturer-control",
+            password="test-password",
+        )
+
+        lecturer_profile = self.lecturer.userprofile
+        lecturer_profile.role = "lecturer"
+        lecturer_profile.save()
+
+        TeachingAssignment.objects.create(
+            course_offering=self.offering,
+            lecturer=lecturer_profile,
+        )
+
+        self.student = User.objects.create_user(
+            username="student-control",
+            password="test-password",
+        )
+
+        student_profile = self.student.userprofile
+        student_profile.role = "student"
+        student_profile.save()
+
+        Enrollment.objects.create(
+            course_offering=self.offering,
+            student=student_profile,
+        )
+
+        self.exam = Exam.objects.create(
+            course=self.course,
+            offering=self.offering,
+            title="Bài kiểm tra Proctoring",
+            start_time=timezone.now() - timedelta(minutes=10),
+            end_time=timezone.now() + timedelta(hours=1),
+        )
+
+        self.student_exam = StudentExam.objects.create(
+            student=self.student,
+            exam=self.exam,
+            warning_count=3,
+            is_locked=True,
+            lock_reason="Đã đạt 3 lần cảnh báo.",
+            locked_at=timezone.now(),
+        )
+
+    def test_lecturer_can_allow_locked_student_exam(self):
+        self.client.force_login(self.lecturer)
+
+        response = self.client.post(
+            reverse(
+                "teacher_allow_student_exam",
+                args=(self.student_exam.pk,),
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+        self.assertEqual(
+            response.url,
+            reverse("teacher_monitor"),
+        )
+        self.student_exam.refresh_from_db()
+
+        self.assertFalse(
+            self.student_exam.is_locked
+        )
+
+        self.assertEqual(
+            self.student_exam.warning_count,
+            0,
+        )
+
+        self.assertEqual(
+            self.student_exam.unlock_count,
+            1,
+        )
+
+    def test_lecturer_can_terminate_locked_student_exam(self):
+        self.client.force_login(self.lecturer)
+
+        response = self.client.post(
+            reverse(
+                "teacher_terminate_student_exam",
+                args=(self.student_exam.pk,),
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+        self.assertEqual(
+            response.url,
+            reverse("teacher_monitor"),
+        )
+        self.student_exam.refresh_from_db()
+
+        self.assertTrue(
+            self.student_exam.is_submitted
+        )
+
+        self.assertTrue(
+            self.student_exam.is_terminated
+        )
+
+    def test_student_cannot_allow_student_exam(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "teacher_allow_student_exam",
+                args=(self.student_exam.pk,),
+            )
+        )
+
+        self.assertIn(
+            response.status_code,
+            (302, 403),
+        )
+
+        self.student_exam.refresh_from_db()
+
+        self.assertTrue(
+            self.student_exam.is_locked
+        )
+
+    def test_student_exam_status_owner_can_read(self):
+        self.student_exam.is_locked = True
+        self.student_exam.warning_count = 3
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "warning_count",
+            ]
+        )
+
+        self.client.force_login(self.student_exam.student)
+
+        response = self.client.get(
+            reverse(
+                "student_exam_status",
+                args=[self.student_exam.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        data = response.json()
+
+        self.assertTrue(data["success"])
+        self.assertTrue(data["is_locked"])
+        self.assertEqual(data["warning_count"], 3)
+        self.assertFalse(data["is_submitted"])
+        self.assertFalse(data["is_terminated"])
+
+    def test_student_exam_status_other_student_cannot_read(self):
+        other_student = User.objects.create_user(
+            username="other_student",
+            password="test123",
+        )
+
+        self.client.force_login(other_student)
+
+        response = self.client.get(
+            reverse(
+                "student_exam_status",
+                args=[self.student_exam.id],
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_student_can_start_screen_sharing_when_unlocked(self):
+        self.student_exam.is_locked = False
+        self.student_exam.save(update_fields=["is_locked"])
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "start_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+
+        self.student_exam.refresh_from_db()
+        self.assertTrue(self.student_exam.is_screen_sharing)
+
+        self.assertEqual(
+            ProctorEvent.objects.filter(
+                student_exam=self.student_exam,
+                event_type="screen_share_started",
+            ).count(),
+            1,
+        )
+
+    def test_student_cannot_start_screen_sharing_when_locked(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "start_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 423)
+        self.assertEqual(
+            response.json()["code"],
+            "exam_locked",
+        )
+
+        self.student_exam.refresh_from_db()
+        self.assertFalse(self.student_exam.is_screen_sharing)
+
+    def test_other_student_cannot_start_screen_sharing(self):
+        other_student = User.objects.create_user(
+            username="other-screen-student",
+            password="test-password",
+        )
+
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse(
+                "start_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+        self.student_exam.refresh_from_db()
+        self.assertFalse(self.student_exam.is_screen_sharing)
+
+    def test_start_screen_sharing_is_idempotent(self):
+        self.student_exam.is_locked = False
+        self.student_exam.save(update_fields=["is_locked"])
+
+        self.client.force_login(self.student)
+
+        url = reverse(
+            "start_screen_sharing",
+            args=[self.student_exam.pk],
+        )
+
+        first_response = self.client.post(url)
+        second_response = self.client.post(url)
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+
+        self.assertEqual(
+            ProctorEvent.objects.filter(
+                student_exam=self.student_exam,
+                event_type="screen_share_started",
+            ).count(),
+            1,
+        )
+
+    def test_student_cannot_start_screen_sharing_after_submission(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = True
+        self.student_exam.save(
+            update_fields=["is_locked", "is_submitted"]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "start_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["code"],
+            "exam_submitted",
+        )
+
+    def test_student_cannot_start_screen_sharing_after_termination(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_terminated = True
+        self.student_exam.save(
+            update_fields=["is_locked", "is_terminated"]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "start_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["code"],
+            "exam_terminated",
+        )
+
+    def test_other_student_cannot_stop_screen_sharing(self):
+        self.student_exam.is_screen_sharing = True
+        self.student_exam.save(
+            update_fields=["is_screen_sharing"]
+        )
+
+        other_student = User.objects.create_user(
+            username="other-stop-screen-student",
+            password="test-password",
+        )
+
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse(
+                "stop_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+        self.student_exam.refresh_from_db()
+        self.assertTrue(self.student_exam.is_screen_sharing)
+
+    def test_stopping_already_stopped_screen_sharing_does_not_duplicate_event(self):
+        self.student_exam.is_screen_sharing = False
+        self.student_exam.save(
+            update_fields=["is_screen_sharing"]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "stop_screen_sharing",
+                args=[self.student_exam.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertFalse(response.json()["is_screen_sharing"])
+
+        self.assertEqual(
+            ProctorEvent.objects.filter(
+                student_exam=self.student_exam,
+                event_type="screen_share_stopped",
+            ).count(),
+            0,
+        )
+
+
+    @patch("firstApp.views.run_cpp")
+    def test_run_code_rejects_locked_exam_before_compilation(
+        self,
+        mock_run_cpp,
+    ):
+        self.student_exam.is_locked = True
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = False
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse("run_code"),
+            data=json.dumps({
+                "student_exam_id": self.student_exam.pk,
+                "question_id": 1,
+                "code": "int main() { return 0; }",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            423,
+            response.content.decode("utf-8"),
+        )
+        self.assertEqual(
+            response.json()["code"],
+            "exam_locked",
+        )
+
+        mock_run_cpp.assert_not_called()
+
+
+    @patch("firstApp.views.run_cpp")
+    def test_run_code_rejects_terminated_exam_before_compilation(
+        self,
+        mock_run_cpp,
+    ):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = True
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse("run_code"),
+            data=json.dumps({
+                "student_exam_id": self.student_exam.pk,
+                "question_id": 1,
+                "code": "int main() { return 0; }",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            409,
+            response.content.decode("utf-8"),
+        )
+        self.assertEqual(
+            response.json()["code"],
+            "exam_terminated",
+        )
+
+        mock_run_cpp.assert_not_called()
+
+
+    @patch("firstApp.views.run_cpp")
+    def test_run_code_rejects_submitted_exam_before_compilation(
+        self,
+        mock_run_cpp,
+    ):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = True
+        self.student_exam.is_terminated = False
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse("run_code"),
+            data=json.dumps({
+                "student_exam_id": self.student_exam.pk,
+                "question_id": 1,
+                "code": "int main() { return 0; }",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            409,
+            response.content.decode("utf-8"),
+        )
+        self.assertEqual(
+            response.json()["code"],
+            "exam_submitted",
+        )
+        mock_run_cpp.assert_not_called()
+
+    @patch(
+        "firstApp.views.run_cpp",
+        return_value={
+            "status": "Success",
+            "stdout": "2",
+            "stderr": "",
+        },
+    )
+    def test_run_code_still_works_when_exam_is_active(self, mock_run_cpp):
+        self.student_exam.is_locked = False
+        self.student_exam.is_terminated = False
+        self.student_exam.question_snapshot = {
+            "questions": [
+                {
+                    "index": 1,
+                    "type": "CODE",
+                    "score": 1,
+                    "test_cases": [
+                        {
+                            "input_data": "",
+                            "expected_output": "2",
+                            "score": 1,
+                        }
+                    ],
+                }
+            ]
+        }
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_terminated",
+                "question_snapshot",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse("run_code"),
+            data=json.dumps({
+                "student_exam_id": self.student_exam.pk,
+                "question_id": 1,
+                "code": "int main() { return 0; }",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+            response.content.decode("utf-8"),
+        )
+        self.assertTrue(response.json()["success"])
+        mock_run_cpp.assert_called_once()
+
+    def test_autosave_rejects_locked_exam(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "autosave_exam",
+                args=[self.student_exam.pk],
+            ),
+            {"question_1": "A"},
+        )
+
+        self.assertEqual(response.status_code, 423)
+        self.assertEqual(
+            response.json()["code"],
+            "exam_locked",
+        )
+
+        self.assertFalse(
+            StudentAnswer.objects.filter(
+                student_exam=self.student_exam,
+            ).exists()
+        )
+
+    def test_autosave_rejects_terminated_exam(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_terminated = True
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_terminated",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "autosave_exam",
+                args=[self.student_exam.pk],
+            ),
+            {"question_1": "A"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+        self.assertFalse(
+            StudentAnswer.objects.filter(
+                student_exam=self.student_exam,
+            ).exists()
+        )
+
+    def test_autosave_saves_answer_when_exam_is_active(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_terminated = False
+        self.student_exam.question_snapshot = {
+            "questions": [
+                {
+                    "index": 1,
+                    "type": "MCQ",
+                    "score": 1,
+                    "choices": [
+                        {"id": "A", "text": "Đáp án A"},
+                        {"id": "B", "text": "Đáp án B"},
+                    ],
+                }
+            ]
+        }
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_terminated",
+                "question_snapshot",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "autosave_exam",
+                args=[self.student_exam.pk],
+            ),
+            {"question_1": "A"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertEqual(response.json()["saved_count"], 1)
+
+        answer = StudentAnswer.objects.get(
+            student_exam=self.student_exam,
+            question_index=1,
+        )
+
+        self.assertEqual(answer.answer_text, "A")
+        self.assertEqual(answer.question_type, "MCQ")
+
+    def test_submit_exam_does_not_submit_locked_exam(self):
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "submit_exam",
+                args=[self.student_exam.pk],
+            ),
+            {},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.student_exam.refresh_from_db()
+
+        self.assertTrue(self.student_exam.is_locked)
+        self.assertFalse(self.student_exam.is_submitted)
+
+
+
+    def test_submit_exam_does_not_grade_terminated_exam(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = True
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        with patch(
+            "firstApp.views._grade_student_exam"
+        ) as mock_grade:
+            response = self.client.post(
+                reverse(
+                    "submit_exam",
+                    args=[self.student_exam.pk],
+                ),
+                {},
+            )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        self.assertEqual(
+            response.url,
+            reverse(
+                "exam_result",
+                args=[self.student_exam.pk],
+            ),
+        )
+
+        mock_grade.assert_not_called()
+
+        self.student_exam.refresh_from_db()
+
+        self.assertTrue(self.student_exam.is_terminated)
+        self.assertFalse(self.student_exam.is_submitted)
+
+
+    def test_submitting_exam_twice_does_not_regrade(self):
+        self.student_exam.is_locked = False
+        self.student_exam.question_snapshot = {
+            "questions": [
+                {
+                    "index": 1,
+                    "type": "MCQ",
+                    "score": 1,
+                    "correct_answer": "A",
+                    "choices": [
+                        {
+                            "id": "A",
+                            "index": 1,
+                            "label": "A",
+                            "text": "Đáp án A",
+                        },
+                        {
+                            "id": "B",
+                            "index": 2,
+                            "label": "B",
+                            "text": "Đáp án B",
+                        },
+                    ],
+                }
+            ]
+        }
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "question_snapshot",
+            ]
+        )
+
+        self.client.force_login(self.student)
+
+        url = reverse(
+            "submit_exam",
+            args=[self.student_exam.pk],
+        )
+
+        first_response = self.client.post(
+            url,
+            {"question_1": "A"},
+        )
+
+        self.assertEqual(first_response.status_code, 302)
+
+        self.student_exam.refresh_from_db()
+
+        self.assertTrue(self.student_exam.is_submitted)
+        self.assertEqual(self.student_exam.score, 1.0)
+
+        answer_count_before = StudentAnswer.objects.filter(
+            student_exam=self.student_exam,
+        ).count()
+
+        score_before = self.student_exam.score
+
+        second_response = self.client.post(
+            url,
+            {"question_1": "B"},
+        )
+
+        self.assertEqual(second_response.status_code, 302)
+        self.assertEqual(
+            second_response.url,
+            reverse(
+                "exam_result",
+                kwargs={
+                    "student_exam_id": self.student_exam.pk,
+                },
+            ),
+        )
+
+        self.student_exam.refresh_from_db()
+
+        self.assertEqual(self.student_exam.score, score_before)
+        self.assertEqual(
+            StudentAnswer.objects.filter(
+                student_exam=self.student_exam,
+            ).count(),
+            answer_count_before,
+        )
+
+        answer = StudentAnswer.objects.get(
+            student_exam=self.student_exam,
+            question_index=1,
+        )
+
+        self.assertEqual(answer.answer_text, "Đáp án A")
+
+    def test_autosave_cannot_modify_submitted_exam(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = True
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+            ]
+        )
+
+        StudentAnswer.objects.create(
+            student_exam=self.student_exam,
+            question_index=1,
+            question_type="MCQ",
+            answer_text="A",
+            answer_payload={"choice_index": "A"},
+            score=1.0,
+            is_correct=True,
+        )
+
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse(
+                "autosave_exam",
+                args=[self.student_exam.pk],
+            ),
+            {"question_1": "B"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["code"],
+            "exam_submitted",
+        )
+        answer = StudentAnswer.objects.get(
+            student_exam=self.student_exam,
+            question_index=1,
+        )
+
+        self.assertEqual(answer.answer_text, "A")
+        self.assertEqual(answer.score, 1.0)
+        self.assertTrue(answer.is_correct)
+
+    def test_submit_exam_rejects_another_students_attempt(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = False
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+            ]
+        )
+
+        other_student = User.objects.create_user(
+            username="other-student-submit",
+            password="test-password",
+        )
+        self.client.force_login(other_student)
+
+        with patch("firstApp.views._grade_student_exam") as mock_grade:
+            response = self.client.post(
+                reverse(
+                    "submit_exam",
+                    args=[self.student_exam.pk],
+                ),
+                {"question_1": "A"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        mock_grade.assert_not_called()
+
+        self.student_exam.refresh_from_db()
+        self.assertFalse(self.student_exam.is_submitted)
+
+    def test_autosave_rejects_another_students_attempt(self):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = False
+        self.student_exam.question_snapshot = {
+            "questions": [
+                {
+                    "index": 1,
+                    "type": "MCQ",
+                    "score": 1,
+                    "choices": [
+                        {"id": "A", "text": "Đáp án A"},
+                        {"id": "B", "text": "Đáp án B"},
+                    ],
+                }
+            ]
+        }
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+                "question_snapshot",
+            ]
+        )
+
+        other_student = User.objects.create_user(
+            username="other-student-autosave",
+            password="test-password",
+        )
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse(
+                "autosave_exam",
+                args=[self.student_exam.pk],
+            ),
+            {"question_1": "A"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+        self.assertFalse(
+            StudentAnswer.objects.filter(
+                student_exam=self.student_exam,
+            ).exists()
+        )
+
+    @patch(
+        "firstApp.views.run_cpp",
+        return_value={
+            "status": "Success",
+            "stdout": "2",
+            "stderr": "",
+        },
+    )
+    def test_run_code_rejects_another_students_attempt(
+            self,
+            mock_run_cpp,
+    ):
+        self.student_exam.is_locked = False
+        self.student_exam.is_submitted = False
+        self.student_exam.is_terminated = False
+        self.student_exam.question_snapshot = {
+            "questions": [
+                {
+                    "index": 1,
+                    "type": "CODE",
+                    "score": 1,
+                    "test_cases": [
+                        {
+                            "input_data": "",
+                            "expected_output": "2",
+                            "score": 1,
+                        }
+                    ],
+                }
+            ]
+        }
+        self.student_exam.save(
+            update_fields=[
+                "is_locked",
+                "is_submitted",
+                "is_terminated",
+                "question_snapshot",
+            ]
+        )
+
+        other_student = User.objects.create_user(
+            username="other-student-code",
+            password="test-password",
+        )
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse("run_code"),
+            data=json.dumps({
+                "student_exam_id": self.student_exam.pk,
+                "question_id": 1,
+                "code": "int main() { return 0; }",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            404,
+            response.content.decode("utf-8"),
+        )
+        mock_run_cpp.assert_not_called()
+
+    def test_qr_login_invalid_json_returns_safe_error(self):
+        response = self.client.post(
+            reverse("verify_qr_login"),
+            data="{",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["status"],
+            "error",
+        )
+        self.assertEqual(
+            response.json()["message"],
+            "Dữ liệu đăng nhập không hợp lệ.",
+        )
+
+    def test_qr_login_valid_token_creates_session(self):
+        user = User.objects.create_user(
+            username="qr-student-valid",
+            password="safe-test-password",
+        )
+        profile = user.userprofile
+        profile.role = "student"
+        profile.save()
+
+        response = self.client.post(
+            reverse("verify_qr_login"),
+            data=json.dumps({
+                "qr_token": str(profile.qr_token),
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "success")
+        self.assertEqual(
+            str(self.client.session["_auth_user_id"]),
+            str(user.pk),
+        )
+
+    def test_qr_login_invalid_token_does_not_create_session(self):
+        response = self.client.post(
+            reverse("verify_qr_login"),
+            data=json.dumps({
+                "qr_token": "invalid-qr-token",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_qr_login_inactive_user_is_rejected(self):
+        user = User.objects.create_user(
+            username="qr-student-inactive",
+            password="safe-test-password",
+            is_active=False,
+        )
+        profile = user.userprofile
+        profile.role = "student"
+        profile.save()
+
+        response = self.client.post(
+            reverse("verify_qr_login"),
+            data=json.dumps({
+                "qr_token": str(profile.qr_token),
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+
+
+
+class FaceLoginSecurityTests(TestCase):
+    """Kiểm thử các trường hợp xác thực đăng nhập khuôn mặt."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="face-student-01",
+            password="safe-test-password",
+        )
+        self.profile = self.user.userprofile
+
+        # Vector mẫu 512 chiều: chiều đầu tiên bằng 1.
+        self.embedding = [1.0] + [0.0] * 511
+
+        # Tạo ảnh PNG hợp lệ để kiểm thử khâu đọc ảnh.
+        from PIL import Image
+
+        image_buffer = BytesIO()
+        Image.new("RGB", (160, 160), color="white").save(
+            image_buffer,
+            format="PNG",
+        )
+
+        encoded_image = base64.b64encode(
+            image_buffer.getvalue()
+        ).decode("ascii")
+
+        self.image_data = "data:image/png;base64," + encoded_image
+
+    def create_face_profile(
+        self,
+        user_profile,
+        embedding=None,
+        is_active=True,
+    ):
+        return FaceProfile.objects.create(
+            user_profile=user_profile,
+            embedding=embedding or self.embedding,
+            model_name="Facenet512",
+            detector_backend="opencv",
+            is_active=is_active,
+            consented_at=timezone.now(),
+        )
+
+    def post_face_login(self, consent=True):
+        return self.client.post(
+            reverse("verify_face_login"),
+            data=json.dumps({
+                "consent": consent,
+                "image": self.image_data,
+            }),
+            content_type="application/json",
+        )
+
+    def test_login_rejects_missing_consent(self):
+        response = self.post_face_login(consent=False)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_rejects_when_no_face_profile_exists(self):
+        from unittest.mock import patch
+
+        with patch(
+            "deepface.DeepFace.represent",
+            return_value=[{"embedding": self.embedding}],
+        ):
+            response = self.post_face_login()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()["success"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_rejects_inactive_face_profile(self):
+        self.create_face_profile(
+            self.profile,
+            is_active=False,
+        )
+
+        from unittest.mock import patch
+
+        with patch(
+            "deepface.DeepFace.represent",
+            return_value=[{"embedding": self.embedding}],
+        ):
+            response = self.post_face_login()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()["success"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_rejects_non_matching_face(self):
+        different_embedding = [0.0, 1.0] + [0.0] * 510
+
+        self.create_face_profile(
+            self.profile,
+            embedding=different_embedding,
+        )
+
+        from unittest.mock import patch
+
+        with patch(
+            "deepface.DeepFace.represent",
+            return_value=[{"embedding": self.embedding}],
+        ):
+            response = self.post_face_login()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()["success"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_rejects_ambiguous_matching_faces(self):
+        self.create_face_profile(self.profile)
+
+        second_user = User.objects.create_user(
+            username="face-student-02",
+            password="safe-test-password",
+        )
+
+        self.create_face_profile(second_user.userprofile)
+
+        from unittest.mock import patch
+
+        with patch(
+            "deepface.DeepFace.represent",
+            return_value=[{"embedding": self.embedding}],
+        ):
+            response = self.post_face_login()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()["success"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_succeeds_for_matching_face(self):
+        self.create_face_profile(self.profile)
+
+        from unittest.mock import patch
+
+        with patch(
+            "deepface.DeepFace.represent",
+            return_value=[{"embedding": self.embedding}],
+        ):
+            response = self.post_face_login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["success"])
+        self.assertEqual(
+            response.json()["redirect_url"],
+            "/",
+        )
+
+        self.assertEqual(
+            str(self.client.session["_auth_user_id"]),
+            str(self.user.pk),
+        )
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+        self.user = User.objects.create_user(
+            username="face-student-01",
+            password="safe-test-password",
+        )
+        self.profile = self.user.userprofile
+        self.embedding = [1.0] + [0.0] * 511
+
+        from PIL import Image
+
+        image_buffer = BytesIO()
+        Image.new("RGB", (160, 160), color="white").save(
+            image_buffer, format="PNG"
+        )
+
+        encoded_image = base64.b64encode(
+            image_buffer.getvalue()
+        ).decode("ascii")
+
+        self.image_data = "data:image/png;base64," + encoded_image
+
+    def test_login_rate_limit_returns_429_after_five_requests(self):
+        from unittest.mock import patch
+
+        self.create_face_profile(self.profile)
+
+        with patch(
+                "deepface.DeepFace.represent",
+                return_value=[{"embedding": self.embedding}],
+        ):
+            responses = [
+                self.post_face_login()
+                for _ in range(6)
+            ]
+
+        # Năm yêu cầu đầu được xử lý bình thường.
+        for response in responses[:5]:
+            self.assertEqual(response.status_code, 200)
+
+        # Yêu cầu thứ sáu vượt giới hạn 5 yêu cầu/phút.
+        self.assertEqual(responses[5].status_code, 429)
+        self.assertFalse(responses[5].json()["success"])
+
