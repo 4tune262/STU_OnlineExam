@@ -13,6 +13,7 @@ from django.contrib.staticfiles import finders
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db import transaction, IntegrityError
 from django.templatetags.static import static
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -31,9 +32,14 @@ from .models import (
     ProctorEvent,
     StudentAnswer,
     StudentExam,
-    TeachingAssignment,
+    TeachingAssignment, ExamAssignment, ExamPaper, UserProfile,
 )
-
+from .services.exam_paper_service import (
+    create_exam_paper,
+    copy_exam_paper,
+    assign_paper_manual,
+    assign_papers_random,
+)
 
 class AcademicStructureTests(TestCase):
     """
@@ -1382,12 +1388,12 @@ class AcademicStructureTests(TestCase):
         )
 
         with patch(
-            "firstApp.views.run_cpp",
-            return_value={
-                "status": "Success",
-                "stdout": "ok",
-                "stderr": "",
-            },
+                "firstApp.views.run_code_by_language",
+                return_value={
+                    "status": "Success",
+                    "stdout": "ok",
+                    "stderr": "",
+                },
         ):
             response = client.post(
                 reverse(
@@ -2950,12 +2956,12 @@ class StudentExamProctoringControlTests(TestCase):
             0,
         )
 
-
-    @patch("firstApp.views.run_cpp")
+    @patch("firstApp.views.run_code_by_language")
     def test_run_code_rejects_locked_exam_before_compilation(
-        self,
-        mock_run_cpp,
+            self,
+            mock_run_code_by_language,
     ):
+        # Arrange: khóa bài thi
         self.student_exam.is_locked = True
         self.student_exam.is_submitted = False
         self.student_exam.is_terminated = False
@@ -2969,6 +2975,7 @@ class StudentExamProctoringControlTests(TestCase):
 
         self.client.force_login(self.student)
 
+        # Act: sinh viên gửi yêu cầu chạy code
         response = self.client.post(
             reverse("run_code"),
             data=json.dumps({
@@ -2979,6 +2986,7 @@ class StudentExamProctoringControlTests(TestCase):
             content_type="application/json",
         )
 
+        # Assert: hệ thống từ chối vì bài thi đang bị khóa
         self.assertEqual(
             response.status_code,
             423,
@@ -2989,14 +2997,15 @@ class StudentExamProctoringControlTests(TestCase):
             "exam_locked",
         )
 
-        mock_run_cpp.assert_not_called()
+        # Quan trọng: không được gọi trình biên dịch
+        mock_run_code_by_language.assert_not_called()
 
-
-    @patch("firstApp.views.run_cpp")
+    @patch("firstApp.views.run_code_by_language")
     def test_run_code_rejects_terminated_exam_before_compilation(
-        self,
-        mock_run_cpp,
+            self,
+            mock_run_code_by_language,
     ):
+        # Arrange: bài thi đã bị chấm dứt
         self.student_exam.is_locked = False
         self.student_exam.is_submitted = False
         self.student_exam.is_terminated = True
@@ -3010,6 +3019,7 @@ class StudentExamProctoringControlTests(TestCase):
 
         self.client.force_login(self.student)
 
+        # Act: sinh viên gửi yêu cầu chạy code
         response = self.client.post(
             reverse("run_code"),
             data=json.dumps({
@@ -3020,6 +3030,7 @@ class StudentExamProctoringControlTests(TestCase):
             content_type="application/json",
         )
 
+        # Assert: hệ thống từ chối vì bài thi đã bị chấm dứt
         self.assertEqual(
             response.status_code,
             409,
@@ -3030,14 +3041,15 @@ class StudentExamProctoringControlTests(TestCase):
             "exam_terminated",
         )
 
-        mock_run_cpp.assert_not_called()
+        # Quan trọng: không được gọi trình biên dịch
+        mock_run_code_by_language.assert_not_called()
 
-
-    @patch("firstApp.views.run_cpp")
+    @patch("firstApp.views.run_code_by_language")
     def test_run_code_rejects_submitted_exam_before_compilation(
-        self,
-        mock_run_cpp,
+            self,
+            mock_run_code_by_language,
     ):
+        # Arrange: bài thi đã được nộp
         self.student_exam.is_locked = False
         self.student_exam.is_submitted = True
         self.student_exam.is_terminated = False
@@ -3051,6 +3063,7 @@ class StudentExamProctoringControlTests(TestCase):
 
         self.client.force_login(self.student)
 
+        # Act: sinh viên gửi yêu cầu chạy code
         response = self.client.post(
             reverse("run_code"),
             data=json.dumps({
@@ -3061,6 +3074,7 @@ class StudentExamProctoringControlTests(TestCase):
             content_type="application/json",
         )
 
+        # Assert: hệ thống từ chối vì bài thi đã nộp
         self.assertEqual(
             response.status_code,
             409,
@@ -3070,17 +3084,22 @@ class StudentExamProctoringControlTests(TestCase):
             response.json()["code"],
             "exam_submitted",
         )
-        mock_run_cpp.assert_not_called()
+
+        # Quan trọng: không được gọi trình biên dịch
+        mock_run_code_by_language.assert_not_called()
 
     @patch(
-        "firstApp.views.run_cpp",
+        "firstApp.views.run_code_by_language",
         return_value={
             "status": "Success",
             "stdout": "2",
             "stderr": "",
         },
     )
-    def test_run_code_still_works_when_exam_is_active(self, mock_run_cpp):
+    def test_run_code_still_works_when_exam_is_active(
+            self,
+            mock_run_code_by_language,
+    ):
         self.student_exam.is_locked = False
         self.student_exam.is_terminated = False
         self.student_exam.question_snapshot = {
@@ -3125,7 +3144,7 @@ class StudentExamProctoringControlTests(TestCase):
             response.content.decode("utf-8"),
         )
         self.assertTrue(response.json()["success"])
-        mock_run_cpp.assert_called_once()
+        mock_run_code_by_language.assert_called_once()
 
     def test_autosave_rejects_locked_exam(self):
         self.client.force_login(self.student)
@@ -3853,3 +3872,1400 @@ class FaceLoginSecurityTests(TestCase):
         self.assertEqual(responses[5].status_code, 429)
         self.assertFalse(responses[5].json()["success"])
 
+
+
+
+
+# ==========================================================
+# EXAM PAPER & EXAM ASSIGNMENT TESTS
+# ==========================================================
+
+class ExamPaperAssignmentTests(TestCase):
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            code="PAPER101",
+            name="Kiểm thử phiên bản đề",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="PAPER-TEST-01",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.exam = self.create_exam(
+            self.offering,
+            "Bài kiểm tra phiên bản đề",
+        )
+
+        self.student = self.create_profile(
+            "paper-student",
+            "student",
+        )
+
+        Enrollment.objects.create(
+            course_offering=self.offering,
+            student=self.student,
+            status="active",
+        )
+
+    # ------------------------------------------------------
+    # HELPER
+    # ------------------------------------------------------
+
+    def create_profile(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            password="safe-test-password",
+        )
+
+        profile = user.userprofile
+        profile.role = role
+        profile.save()
+
+        return profile
+
+    def create_exam(self, offering, title):
+        return Exam.objects.create(
+            course=self.course,
+            offering=offering,
+            title=title,
+            duration_minutes=60,
+            start_time=timezone.now() + timedelta(days=1),
+            end_time=timezone.now() + timedelta(days=2),
+        )
+
+    def create_paper(
+        self,
+        exam=None,
+        paper_number=1,
+        paper_code="101",
+        question_data=None,
+    ):
+        return ExamPaper.objects.create(
+            exam=exam or self.exam,
+            paper_number=paper_number,
+            paper_code=paper_code,
+            title=f"Phiên bản {paper_code}",
+            question_data=(
+                question_data
+                if question_data is not None
+                else [
+                    {
+                        "type": "MCQ",
+                        "content": "Câu hỏi kiểm thử",
+                        "score": 1,
+                    }
+                ]
+            ),
+        )
+
+    def create_assignment(self, paper=None):
+        return ExamAssignment.objects.create(
+            exam=self.exam,
+            paper=paper or self.create_paper(),
+            student=self.student,
+            assignment_method="manual",
+        )
+
+    # ------------------------------------------------------
+    # 1. CREATE PAPER
+    # ------------------------------------------------------
+
+    def test_create_exam_paper_successfully(self):
+        paper = self.create_paper()
+
+        self.assertEqual(
+            paper.exam,
+            self.exam,
+        )
+
+        self.assertEqual(
+            paper.paper_number,
+            1,
+        )
+
+        self.assertEqual(
+            paper.paper_code,
+            "101",
+        )
+
+        self.assertTrue(
+            paper.is_active,
+        )
+
+        self.assertEqual(
+            len(paper.question_data),
+            1,
+        )
+
+    # ------------------------------------------------------
+    # 2. UNIQUE PAPER NUMBER
+    # ------------------------------------------------------
+
+    def test_cannot_duplicate_paper_number_in_same_exam(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="101",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_paper(
+                    paper_number=1,
+                    paper_code="102",
+                )
+
+    # ------------------------------------------------------
+    # 3. UNIQUE PAPER CODE
+    # ------------------------------------------------------
+
+    def test_cannot_duplicate_paper_code_in_same_exam(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="101",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_paper(
+                    paper_number=2,
+                    paper_code="101",
+                )
+
+    # ------------------------------------------------------
+    # 4. SAME PAPER CODE IN DIFFERENT EXAMS
+    # ------------------------------------------------------
+
+    def test_same_paper_code_allowed_in_different_exams(self):
+        other_exam = self.create_exam(
+            self.offering,
+            "Bài kiểm tra khác",
+        )
+
+        paper_1 = self.create_paper(
+            exam=self.exam,
+            paper_number=1,
+            paper_code="101",
+        )
+
+        paper_2 = self.create_paper(
+            exam=other_exam,
+            paper_number=1,
+            paper_code="101",
+        )
+
+        self.assertNotEqual(
+            paper_1.exam_id,
+            paper_2.exam_id,
+        )
+
+    # ------------------------------------------------------
+    # 5. MANUAL ASSIGNMENT SUCCESS
+    # ------------------------------------------------------
+
+    def test_assign_paper_to_enrolled_student(self):
+        paper = self.create_paper()
+
+        assignment = ExamAssignment.objects.create(
+            exam=self.exam,
+            paper=paper,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        self.assertEqual(
+            assignment.exam_id,
+            self.exam.pk,
+        )
+
+        self.assertEqual(
+            assignment.paper_id,
+            paper.pk,
+        )
+
+        self.assertEqual(
+            assignment.student_id,
+            self.student.pk,
+        )
+
+        self.assertEqual(
+            assignment.assignment_method,
+            "manual",
+        )
+
+    # ------------------------------------------------------
+    # 6. STUDENT MUST BE ENROLLED
+    # ------------------------------------------------------
+
+    def test_cannot_assign_to_student_not_enrolled(self):
+        other_student = self.create_profile(
+            "paper-not-enrolled",
+            "student",
+        )
+
+        paper = self.create_paper()
+
+        assignment = ExamAssignment(
+            exam=self.exam,
+            paper=paper,
+            student=other_student,
+            assignment_method="manual",
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    # ------------------------------------------------------
+    # 7. PAPER MUST BELONG TO SAME EXAM
+    # ------------------------------------------------------
+
+    def test_cannot_assign_paper_from_another_exam(self):
+        other_exam = self.create_exam(
+            self.offering,
+            "Bài thi thứ hai",
+        )
+
+        other_paper = self.create_paper(
+            exam=other_exam,
+            paper_number=1,
+            paper_code="201",
+        )
+
+        assignment = ExamAssignment(
+            exam=self.exam,
+            paper=other_paper,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    # ------------------------------------------------------
+    # 8. ONE ASSIGNMENT PER STUDENT PER EXAM
+    # ------------------------------------------------------
+
+    def test_student_cannot_receive_two_assignments_for_same_exam(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="101",
+        )
+
+        self.create_assignment(
+            paper=ExamPaper.objects.get(
+                exam=self.exam,
+                paper_code="101",
+            )
+        )
+
+        second_paper = self.create_paper(
+            paper_number=2,
+            paper_code="102",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ExamAssignment.objects.create(
+                    exam=self.exam,
+                    paper=second_paper,
+                    student=self.student,
+                    assignment_method="random",
+                )
+
+    # ------------------------------------------------------
+    # 9. ONLY STUDENT ROLE CAN RECEIVE PAPER
+    # ------------------------------------------------------
+
+    def test_cannot_assign_paper_to_lecturer(self):
+        lecturer = self.create_profile(
+            "paper-lecturer",
+            "lecturer",
+        )
+
+        paper = self.create_paper()
+
+        assignment = ExamAssignment(
+            exam=self.exam,
+            paper=paper,
+            student=lecturer,
+            assignment_method="manual",
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    # ------------------------------------------------------
+    # 10. INACTIVE PAPER CANNOT BE ASSIGNED
+    # ------------------------------------------------------
+
+    def test_cannot_assign_inactive_paper(self):
+        paper = self.create_paper()
+        paper.is_active = False
+        paper.save(update_fields=["is_active"])
+
+        assignment = ExamAssignment(
+            exam=self.exam,
+            paper=paper,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+
+
+
+
+class ExamPaperServiceTests(TestCase):
+    """
+    Kiểm thử Service Layer quản lý phiên bản đề thi.
+    """
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            code="SERVICE101",
+            name="Kiểm thử Service Layer",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="SERVICE-N1",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.exam = Exam.objects.create(
+            course=self.course,
+            offering=self.offering,
+            title="Kiểm tra Service Layer",
+            duration_minutes=60,
+            start_time=timezone.now() + timedelta(days=1),
+            end_time=timezone.now() + timedelta(days=2),
+        )
+
+    def create_profile(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            password="safe-test-password",
+        )
+
+        profile = user.userprofile
+        profile.role = role
+        profile.save()
+
+        return profile
+
+    def create_paper(
+        self,
+        paper_number=1,
+        paper_code="A001",
+        question_data=None,
+    ):
+        if question_data is None:
+            question_data = [
+                {
+                    "index": 1,
+                    "type": "MCQ",
+                    "title": "Câu hỏi kiểm thử",
+                    "score": 1,
+                    "options": ["A", "B", "C", "D"],
+                    "correct_answer": "A",
+                }
+            ]
+
+        return ExamPaper.objects.create(
+            exam=self.exam,
+            paper_number=paper_number,
+            paper_code=paper_code,
+            title=f"Đề {paper_code}",
+            question_data=question_data,
+            is_active=True,
+        )
+
+    # ======================================================
+    # 1. TẠO PHIÊN BẢN ĐỀ ĐỘC LẬP
+    # ======================================================
+
+    def test_create_exam_paper_successfully(self):
+        question_data = [
+            {
+                "index": 1,
+                "type": "MCQ",
+                "title": "Câu hỏi mới",
+                "score": 2,
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "B",
+            }
+        ]
+
+        paper = create_exam_paper(
+            exam=self.exam,
+            paper_number=1,
+            paper_code="A001",
+            title="Phiên bản A",
+            question_data=question_data,
+        )
+
+        self.assertIsNotNone(paper.pk)
+        self.assertEqual(paper.exam_id, self.exam.pk)
+        self.assertEqual(paper.paper_number, 1)
+        self.assertEqual(paper.paper_code, "A001")
+        self.assertEqual(paper.title, "Phiên bản A")
+        self.assertEqual(paper.question_data, question_data)
+        self.assertIsNone(paper.copied_from_id)
+        self.assertTrue(paper.is_active)
+
+    def test_create_exam_paper_does_not_share_question_data_reference(self):
+        question_data = [
+            {
+                "index": 1,
+                "type": "MCQ",
+                "title": "Câu hỏi gốc",
+                "options": ["A", "B"],
+            }
+        ]
+
+        paper = create_exam_paper(
+            exam=self.exam,
+            paper_number=1,
+            paper_code="A001",
+            question_data=question_data,
+        )
+
+        question_data[0]["title"] = "Đã thay đổi bên ngoài"
+
+        paper.refresh_from_db()
+
+        self.assertEqual(
+            paper.question_data[0]["title"],
+            "Câu hỏi gốc",
+        )
+
+    def test_create_exam_paper_rejects_duplicate_number(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="A001",
+        )
+
+        with self.assertRaises(ValidationError):
+            create_exam_paper(
+                exam=self.exam,
+                paper_number=1,
+                paper_code="A002",
+                question_data=[],
+            )
+
+        self.assertEqual(
+            ExamPaper.objects.filter(exam=self.exam).count(),
+            1,
+        )
+
+    def test_create_exam_paper_rejects_duplicate_code(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="A001",
+        )
+
+        with self.assertRaises(ValidationError):
+            create_exam_paper(
+                exam=self.exam,
+                paper_number=2,
+                paper_code="A001",
+                question_data=[],
+            )
+
+        self.assertEqual(
+            ExamPaper.objects.filter(exam=self.exam).count(),
+            1,
+        )
+
+    # ======================================================
+    # 2. SAO CHÉP PHIÊN BẢN ĐỀ
+    # ======================================================
+
+    def test_copy_exam_paper_successfully(self):
+        source_data = [
+            {
+                "index": 1,
+                "type": "MCQ",
+                "title": "Câu hỏi nguồn",
+                "score": 2,
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "C",
+            }
+        ]
+
+        source = self.create_paper(
+            paper_number=1,
+            paper_code="A001",
+            question_data=source_data,
+        )
+
+        copied = copy_exam_paper(
+            source_paper=source,
+            paper_number=2,
+            paper_code="A002",
+            title="Phiên bản sao chép",
+        )
+
+        self.assertNotEqual(source.pk, copied.pk)
+        self.assertEqual(copied.exam_id, source.exam_id)
+        self.assertEqual(copied.paper_number, 2)
+        self.assertEqual(copied.paper_code, "A002")
+        self.assertEqual(copied.question_data, source.question_data)
+        self.assertEqual(copied.copied_from_id, source.pk)
+        self.assertTrue(copied.is_active)
+
+    def test_copy_exam_paper_has_independent_question_data(self):
+        source = self.create_paper(
+            paper_number=1,
+            paper_code="A001",
+        )
+
+        copied = copy_exam_paper(
+            source_paper=source,
+            paper_number=2,
+            paper_code="A002",
+        )
+
+        copied.question_data[0]["title"] = "Câu hỏi đã chỉnh sửa"
+        copied.save(update_fields=["question_data"])
+
+        source.refresh_from_db()
+
+        self.assertNotEqual(
+            source.question_data[0]["title"],
+            copied.question_data[0]["title"],
+        )
+
+    def test_copy_exam_paper_rejects_duplicate_code(self):
+        source = self.create_paper(
+            paper_number=1,
+            paper_code="A001",
+        )
+
+        self.create_paper(
+            paper_number=2,
+            paper_code="A002",
+        )
+
+        with self.assertRaises(ValidationError):
+            copy_exam_paper(
+                source_paper=source,
+                paper_number=3,
+                paper_code="A002",
+            )
+
+        self.assertEqual(
+            ExamPaper.objects.filter(exam=self.exam).count(),
+            2,
+        )
+
+
+class ExamPaperAssignmentServiceTests(TestCase):
+    """
+    Kiểm thử nghiệp vụ phân công phiên bản đề cho sinh viên.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth.models import User
+        from django.utils import timezone
+        from datetime import date, timedelta
+
+        from firstApp.models import (
+            Course,
+            AcademicTerm,
+            CourseOffering,
+            Enrollment,
+            Exam,
+            ExamPaper,
+        )
+
+        cls.course = Course.objects.create(
+            code="ASSIGN101",
+            name="Kiểm thử phân công đề",
+            faculty="CNTT",
+        )
+
+        cls.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        cls.offering = CourseOffering.objects.create(
+            course=cls.course,
+            term=cls.term,
+            group_code="ASSIGN-N1",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        now = timezone.now()
+
+        cls.exam = Exam.objects.create(
+            course=cls.course,
+            offering=cls.offering,
+            title="Kiểm thử phân công phiên bản đề",
+            duration_minutes=60,
+            start_time=now + timedelta(days=1),
+            end_time=now + timedelta(days=1, minutes=60),
+        )
+
+        cls.paper_a = ExamPaper.objects.create(
+            exam=cls.exam,
+            paper_number=1,
+            paper_code="ASSIGN-A",
+            title="Đề A",
+            question_data=[{"question": "Câu hỏi A"}],
+        )
+
+        cls.paper_b = ExamPaper.objects.create(
+            exam=cls.exam,
+            paper_number=2,
+            paper_code="ASSIGN-B",
+            title="Đề B",
+            question_data=[{"question": "Câu hỏi B"}],
+        )
+
+        cls.other_exam = Exam.objects.create(
+            course=cls.course,
+            offering=cls.offering,
+            title="Bài thi khác",
+            duration_minutes=60,
+            start_time=now + timedelta(days=2),
+            end_time=now + timedelta(days=2, minutes=60),
+        )
+
+        cls.other_paper = ExamPaper.objects.create(
+            exam=cls.other_exam,
+            paper_number=1,
+            paper_code="OTHER-A",
+            question_data=[{"question": "Đề của bài thi khác"}],
+        )
+
+        def create_student(username):
+            user = User.objects.create_user(
+                username=username,
+                password="TestPassword123!",
+            )
+            profile = user.userprofile
+            profile.role = "student"
+            profile.save()
+
+            Enrollment.objects.create(
+                course_offering=cls.offering,
+                student=profile,
+                status="active",
+            )
+            return profile
+
+        cls.student_1 = create_student("assign_student_1")
+        cls.student_2 = create_student("assign_student_2")
+        cls.student_3 = create_student("assign_student_3")
+
+        cls.unenrolled_user = User.objects.create_user(
+            username="assign_unenrolled",
+            password="TestPassword123!",
+        )
+        cls.unenrolled_student = cls.unenrolled_user.userprofile
+        cls.unenrolled_student.role = "student"
+        cls.unenrolled_student.save()
+
+    def test_manual_assignment_successfully(self):
+        assignment = assign_paper_manual(
+            self.exam,
+            self.paper_a,
+            self.student_1,
+        )
+
+        self.assertEqual(assignment.exam_id, self.exam.pk)
+        self.assertEqual(assignment.paper_id, self.paper_a.pk)
+        self.assertEqual(assignment.student_id, self.student_1.pk)
+        self.assertEqual(assignment.assignment_method, "manual")
+
+    def test_manual_assignment_rejects_unenrolled_student(self):
+        with self.assertRaises(ValidationError):
+            assign_paper_manual(
+                self.exam,
+                self.paper_a,
+                self.unenrolled_student,
+            )
+
+        self.assertFalse(
+            ExamAssignment.objects.filter(
+                exam=self.exam,
+                student=self.unenrolled_student,
+            ).exists()
+        )
+
+    def test_manual_assignment_rejects_paper_from_another_exam(self):
+        with self.assertRaises(ValidationError):
+            assign_paper_manual(
+                self.exam,
+                self.other_paper,
+                self.student_1,
+            )
+
+        self.assertFalse(
+            ExamAssignment.objects.filter(
+                exam=self.exam,
+                student=self.student_1,
+            ).exists()
+        )
+
+    def test_manual_assignment_rejects_inactive_paper(self):
+        self.paper_a.is_active = False
+        self.paper_a.save(update_fields=["is_active"])
+
+        with self.assertRaises(ValidationError):
+            assign_paper_manual(
+                self.exam,
+                self.paper_a,
+                self.student_1,
+            )
+
+        self.assertFalse(
+            ExamAssignment.objects.filter(
+                exam=self.exam,
+                student=self.student_1,
+            ).exists()
+        )
+
+    def test_manual_assignment_rejects_duplicate_assignment(self):
+        assign_paper_manual(
+            self.exam,
+            self.paper_a,
+            self.student_1,
+        )
+
+        with self.assertRaises(ValidationError):
+            assign_paper_manual(
+                self.exam,
+                self.paper_b,
+                self.student_1,
+            )
+
+        assignment = ExamAssignment.objects.get(
+            exam=self.exam,
+            student=self.student_1,
+        )
+        self.assertEqual(assignment.paper_id, self.paper_a.pk)
+
+    def test_random_assignment_distributes_all_eligible_students(self):
+        assignments = assign_papers_random(
+            self.exam,
+            [self.paper_a, self.paper_b],
+        )
+
+        self.assertEqual(len(assignments), 3)
+
+        assigned_student_ids = {
+            assignment.student_id for assignment in assignments
+        }
+
+        self.assertEqual(
+            assigned_student_ids,
+            {
+                self.student_1.pk,
+                self.student_2.pk,
+                self.student_3.pk,
+            },
+        )
+
+        self.assertTrue(
+            all(
+                assignment.assignment_method == "random"
+                for assignment in assignments
+            )
+        )
+
+        paper_counts = {
+            self.paper_a.pk: 0,
+            self.paper_b.pk: 0,
+        }
+
+        for assignment in assignments:
+            paper_counts[assignment.paper_id] += 1
+
+        self.assertLessEqual(
+            abs(paper_counts[self.paper_a.pk] - paper_counts[self.paper_b.pk]),
+            1,
+        )
+
+    def test_random_assignment_supports_selected_students(self):
+        assignments = assign_papers_random(
+            self.exam,
+            [self.paper_a, self.paper_b],
+            student_ids=[self.student_1.pk, self.student_3.pk],
+        )
+
+        self.assertEqual(len(assignments), 2)
+
+        self.assertEqual(
+            {assignment.student_id for assignment in assignments},
+            {self.student_1.pk, self.student_3.pk},
+        )
+
+    def test_random_assignment_does_not_overwrite_existing_assignment(self):
+        existing = assign_paper_manual(
+            self.exam,
+            self.paper_a,
+            self.student_1,
+        )
+
+        assignments = assign_papers_random(
+            self.exam,
+            [self.paper_a, self.paper_b],
+        )
+
+        self.assertEqual(len(assignments), 2)
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.paper_id, self.paper_a.pk)
+
+        self.assertFalse(
+            any(
+                assignment.student_id == self.student_1.pk
+                for assignment in assignments
+            )
+        )
+
+        self.assertEqual(
+            ExamAssignment.objects.filter(exam=self.exam).count(),
+            3,
+        )
+
+    def test_random_assignment_rolls_back_all_when_an_error_occurs(self):
+        from unittest.mock import patch
+        from firstApp.services import exam_paper_service
+
+        original_create_assignment = exam_paper_service._create_assignment
+        call_count = 0
+
+        def create_then_fail(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+
+            assignment = original_create_assignment(*args, **kwargs)
+
+            if call_count == 2:
+                raise RuntimeError("Lỗi giả lập khi phân công.")
+
+            return assignment
+
+        with patch(
+                "firstApp.services.exam_paper_service._create_assignment",
+                side_effect=create_then_fail,
+        ):
+            with self.assertRaises(RuntimeError):
+                assign_papers_random(
+                    self.exam,
+                    [self.paper_a, self.paper_b],
+                )
+
+        self.assertEqual(
+            ExamAssignment.objects.filter(exam=self.exam).count(),
+            0,
+        )
+
+    def test_cannot_change_assigned_paper_after_student_has_attempt(self):
+        assignment = assign_paper_manual(
+            self.exam,
+            self.paper_a,
+            self.student_1,
+        )
+
+        StudentExam.objects.create(
+            student=self.student_1.user,
+            exam=self.exam,
+            paper=self.paper_a,
+            assignment=assignment,
+        )
+
+        assignment.paper = self.paper_b
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+        assignment.refresh_from_db()
+
+        self.assertEqual(
+            assignment.paper_id,
+            self.paper_a.pk,
+        )
+
+
+
+
+
+class ExamPaperTakeExamIntegrationTests(TestCase):
+    """
+    Kiểm thử tích hợp:
+    Sinh viên mở bài thi và nhận đúng phiên bản đề được phân công.
+    """
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            code="PAPERFLOW101",
+            name="Kiểm thử luồng phiên bản đề",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="PAPER-FLOW-01",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.student = self.create_profile(
+            "paper-flow-student",
+            "student",
+        )
+
+        Enrollment.objects.create(
+            course_offering=self.offering,
+            student=self.student,
+            status="active",
+        )
+
+        now = timezone.now()
+
+        self.exam = Exam.objects.create(
+            course=self.course,
+            offering=self.offering,
+            title="Kiểm tra luồng nhận phiên bản đề",
+            duration_minutes=60,
+            start_time=now - timedelta(minutes=5),
+            end_time=now + timedelta(hours=1),
+            question_data=[],
+        )
+
+        self.client = Client()
+        self.client.force_login(self.student.user)
+
+    def create_profile(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            password="safe-test-password",
+        )
+
+        profile = user.userprofile
+        profile.role = role
+        profile.save()
+
+        return profile
+
+    def create_question_data(self, content):
+        return [
+            {
+                "type": "MCQ",
+                "content": content,
+                "score": 1,
+                "choices": [
+                    {"label": "A", "text": "Đáp án A"},
+                    {"label": "B", "text": "Đáp án B"},
+                    {"label": "C", "text": "Đáp án C"},
+                    {"label": "D", "text": "Đáp án D"},
+                ],
+                "correct_answer": "A",
+            }
+        ]
+
+    def create_paper(self, paper_number, paper_code, content):
+        return ExamPaper.objects.create(
+            exam=self.exam,
+            paper_number=paper_number,
+            paper_code=paper_code,
+            title=f"Phiên bản {paper_code}",
+            question_data=self.create_question_data(content),
+            is_active=True,
+        )
+
+    def test_student_receives_assigned_paper_when_starting_exam(self):
+        paper = self.create_paper(
+            paper_number=1,
+            paper_code="FLOW-A",
+            content="Câu hỏi thuộc phiên bản A",
+        )
+
+        assignment = ExamAssignment.objects.create(
+            exam=self.exam,
+            paper=paper,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        response = self.client.get(
+            reverse("take_exam", args=(self.exam.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        attempt = StudentExam.objects.get(
+            student=self.student.user,
+            exam=self.exam,
+        )
+
+        self.assertEqual(attempt.paper_id, paper.pk)
+        self.assertEqual(attempt.assignment_id, assignment.pk)
+        self.assertEqual(attempt.exam_code, "FLOW-A")
+
+        self.assertEqual(
+            attempt.question_snapshot["paper_code"],
+            "FLOW-A",
+        )
+
+        self.assertEqual(
+            attempt.question_snapshot["questions"][0]["content"],
+            "Câu hỏi thuộc phiên bản A",
+        )
+
+    def test_student_cannot_start_versioned_exam_without_assignment(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="FLOW-A",
+            content="Câu hỏi phiên bản A",
+        )
+
+        response = self.client.get(
+            reverse("take_exam", args=(self.exam.pk,))
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertFalse(
+            StudentExam.objects.filter(
+                student=self.student.user,
+                exam=self.exam,
+            ).exists()
+        )
+
+    def test_student_receives_second_assigned_paper_not_first_paper(self):
+        self.create_paper(
+            paper_number=1,
+            paper_code="FLOW-A",
+            content="Nội dung đề A",
+        )
+
+        paper_b = self.create_paper(
+            paper_number=2,
+            paper_code="FLOW-B",
+            content="Nội dung đề B",
+        )
+
+        assignment = ExamAssignment.objects.create(
+            exam=self.exam,
+            paper=paper_b,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        response = self.client.get(
+            reverse("take_exam", args=(self.exam.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        attempt = StudentExam.objects.get(
+            student=self.student.user,
+            exam=self.exam,
+        )
+
+        self.assertEqual(attempt.paper_id, paper_b.pk)
+        self.assertEqual(attempt.assignment_id, assignment.pk)
+        self.assertEqual(attempt.exam_code, "FLOW-B")
+
+        self.assertEqual(
+            attempt.question_snapshot["questions"][0]["content"],
+            "Nội dung đề B",
+        )
+
+    def test_existing_snapshot_does_not_change_after_paper_is_edited(self):
+        paper = self.create_paper(
+            paper_number=1,
+            paper_code="FLOW-A",
+            content="Nội dung ban đầu",
+        )
+
+        ExamAssignment.objects.create(
+            exam=self.exam,
+            paper=paper,
+            student=self.student,
+            assignment_method="manual",
+        )
+
+        response = self.client.get(
+            reverse("take_exam", args=(self.exam.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        attempt = StudentExam.objects.get(
+            student=self.student.user,
+            exam=self.exam,
+        )
+
+        original_snapshot = attempt.question_snapshot.copy()
+
+        paper.question_data = self.create_question_data(
+            "Nội dung đã chỉnh sửa",
+        )
+        paper.save(update_fields=["question_data"])
+
+        response = self.client.get(
+            reverse("take_exam", args=(self.exam.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        attempt.refresh_from_db()
+
+        self.assertEqual(
+            attempt.question_snapshot,
+            original_snapshot,
+        )
+
+        self.assertEqual(
+            attempt.question_snapshot["questions"][0]["content"],
+            "Nội dung ban đầu",
+        )
+
+
+
+
+
+class TeacherExamAssignmentViewTests(TestCase):
+
+    def setUp(self):
+        self.course = Course.objects.create(
+            code="ASSIGN101",
+            name="Kiểm thử phân công đề",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="ASSIGN-N1",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.lecturer = self.create_profile(
+            "assign-lecturer",
+            "lecturer",
+        )
+
+        TeachingAssignment.objects.create(
+            course_offering=self.offering,
+            lecturer=self.lecturer,
+        )
+
+        self.exam = Exam.objects.create(
+            course=self.course,
+            offering=self.offering,
+            title="Bài thi kiểm thử phân công",
+            duration_minutes=60,
+            start_time=timezone.now() + timedelta(days=1),
+            end_time=timezone.now() + timedelta(days=2),
+        )
+
+        self.paper_a = self.create_paper(1, "ASSIGN-A")
+        self.paper_b = self.create_paper(2, "ASSIGN-B")
+
+        self.students = []
+
+        for index in range(1, 4):
+            student = self.create_profile(
+                f"assign-student-{index}",
+                "student",
+            )
+
+            Enrollment.objects.create(
+                course_offering=self.offering,
+                student=student,
+                status="active",
+            )
+
+            self.students.append(student)
+
+        self.client = Client()
+        self.client.force_login(self.lecturer.user)
+
+    def create_profile(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            password="safe-test-password",
+        )
+
+        profile = user.userprofile
+        profile.role = role
+        profile.save()
+
+        return profile
+
+    def create_paper(self, number, code):
+        return ExamPaper.objects.create(
+            exam=self.exam,
+            paper_number=number,
+            paper_code=code,
+            title=f"Phiên bản {code}",
+            question_data=[
+                {
+                    "type": "MCQ",
+                    "content": "Câu hỏi kiểm thử",
+                    "score": 1,
+                    "choices": [
+                        {"label": "A", "text": "A"},
+                        {"label": "B", "text": "B"},
+                    ],
+                    "correct_answer": "A",
+                }
+            ],
+            is_active=True,
+        )
+
+    def test_lecturer_can_view_assignment_page(self):
+        response = self.client.get(
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["student_count"], 3)
+        self.assertEqual(response.context["unassigned_count"], 3)
+
+    def test_lecturer_can_assign_paper_manually(self):
+        response = self.client.post(
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            ),
+            {
+                "action": "manual",
+                "student_id": self.students[0].pk,
+                "paper_id": self.paper_a.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            ),
+        )
+
+        assignment = ExamAssignment.objects.get(
+            exam=self.exam,
+            student=self.students[0],
+        )
+
+        self.assertEqual(assignment.paper_id, self.paper_a.pk)
+        self.assertEqual(assignment.assignment_method, "manual")
+
+    def test_lecturer_can_assign_papers_randomly(self):
+        response = self.client.post(
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            ),
+            {
+                "action": "random",
+                "paper_ids": [
+                    self.paper_a.pk,
+                    self.paper_b.pk,
+                ],
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            ),
+        )
+
+        assignments = ExamAssignment.objects.filter(
+            exam=self.exam,
+        )
+
+        self.assertEqual(assignments.count(), 3)
+
+        self.assertEqual(
+            assignments.filter(
+                assignment_method="random",
+            ).count(),
+            3,
+        )
+
+        count_a = assignments.filter(
+            paper=self.paper_a,
+        ).count()
+
+        count_b = assignments.filter(
+            paper=self.paper_b,
+        ).count()
+
+        self.assertLessEqual(abs(count_a - count_b), 1)
+
+    def test_unassigned_lecturer_cannot_view_assignment_page(self):
+        other_lecturer = self.create_profile(
+            "assign-other-lecturer",
+            "lecturer",
+        )
+
+        self.client.force_login(other_lecturer.user)
+
+        response = self.client.get(
+            reverse(
+                "teacher_exam_assignments",
+                args=(self.exam.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)

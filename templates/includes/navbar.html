@@ -94,7 +94,7 @@
     </button>
 
     <a class="navbar-brand ms-3" href="{% url 'home' %}">
-      <img src="{% static 'images/logo.png' %}" width="45" />
+      <img src="{% static 'images/stu_exam_logo_dark_mode.png' %}" width="45" />
       <span class="fw-bold ms-2">STU Online Examination</span>
     </a>
 
@@ -138,7 +138,7 @@
               class="dropdown-item fw-bold text-primary"
               href="{% url 'qr_login_page' %}"
             >
-              <i class="bi bi-qr-code-scan"></i> Đăng nhập bằng QR
+              <i class="bi bi-qr-code-scan"></i> Đăng nhập
             </a>
           </li>
           {% endif %} {% if request.user.is_authenticated %}

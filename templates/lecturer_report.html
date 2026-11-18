@@ -1,81 +1,446 @@
-{% extends "base.html" %} {% block body_block %}
-<div class="container mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Báo cáo kết quả bài thi: {{ exam.title }}</h2>
-    <a href="{% url 'teacher_exam_pdf' exam.id %}" class="btn btn-primary">
-      <i class="bi bi-file-earmark-pdf"></i> Tải PDF
+
+{% extends "base.html" %}
+{% block body_block %}
+
+<style>
+  .report-page {
+    --stu-primary: #0b3d63;
+    --stu-primary-light: #e8f1f8;
+    --stu-border: #e5eaf0;
+    --stu-muted: #718096;
+    color: #263445;
+    padding-bottom: 40px;
+  }
+
+  .report-page .page-heading {
+    color: var(--stu-primary);
+    font-weight: 750;
+    letter-spacing: -0.4px;
+  }
+
+  .report-page .sub-heading {
+    color: var(--stu-muted);
+    font-size: .9rem;
+  }
+
+  .report-page .report-card {
+    background: #fff;
+    border: 1px solid var(--stu-border);
+    border-radius: 14px;
+    box-shadow: 0 3px 14px rgba(20, 45, 70, .045);
+  }
+
+  .report-page .stat-card {
+    padding: 18px 20px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .report-page .stat-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+    flex-shrink: 0;
+  }
+
+  .report-page .stat-label {
+    color: var(--stu-muted);
+    font-size: .82rem;
+    margin-bottom: 4px;
+  }
+
+  .report-page .stat-value {
+    color: #24364b;
+    font-size: 1.45rem;
+    font-weight: 750;
+    line-height: 1.2;
+  }
+
+  .report-page .section-title {
+    color: #173b5c;
+    font-size: 1.08rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .report-page .section-description {
+    color: var(--stu-muted);
+    font-size: .85rem;
+  }
+
+  .report-page .table {
+    margin-bottom: 0;
+    vertical-align: middle;
+  }
+
+  .report-page .table thead th {
+    background: #f4f7fa;
+    color: #536477;
+    font-size: .76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .35px;
+    white-space: nowrap;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--stu-border);
+  }
+
+  .report-page .table tbody td {
+    padding: 13px 12px;
+    font-size: .875rem;
+    border-color: #edf0f4;
+  }
+
+  .report-page .table tbody tr:hover {
+    background-color: #f7faff;
+  }
+
+  .report-page .student-name {
+    font-weight: 650;
+    color: #263d55;
+  }
+
+  .report-page .student-code {
+    color: #536477;
+    font-family: monospace;
+    font-size: .85rem;
+  }
+
+  .report-page .score-value {
+    color: #1265b1;
+    font-weight: 750;
+    font-size: 1rem;
+  }
+
+  .report-page .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: .77rem;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .report-page .status-success {
+    background: #e7f7ee;
+    color: #16834a;
+  }
+
+  .report-page .status-warning {
+    background: #fff5df;
+    color: #a66a00;
+  }
+
+  .report-page .status-neutral {
+    background: #eef1f5;
+    color: #657386;
+  }
+
+  .report-page .event-type {
+    font-weight: 650;
+    color: #344a60;
+  }
+
+  .report-page .event-confidence {
+    font-weight: 650;
+    color: #52677e;
+  }
+
+  .report-page .event-table td {
+    white-space: nowrap;
+  }
+
+  .report-page .event-table td:last-child {
+    white-space: normal;
+    min-width: 190px;
+  }
+
+  .report-page .btn-stu {
+    background: var(--stu-primary);
+    color: white;
+    border: 1px solid var(--stu-primary);
+  }
+
+  .report-page .btn-stu:hover {
+    background: #082f4d;
+    color: white;
+  }
+
+  .report-page .empty-state {
+    padding: 35px 15px;
+    text-align: center;
+    color: var(--stu-muted);
+  }
+
+  .report-page .empty-state i {
+    display: block;
+    font-size: 30px;
+    margin-bottom: 10px;
+    color: #aab7c5;
+  }
+
+  .report-page .table-responsive {
+    border-radius: 0 0 14px 14px;
+  }
+
+  .report-page .review-form {
+    min-width: 190px;
+  }
+
+  .report-page .section-header {
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--stu-border);
+  }
+
+  @media (max-width: 768px) {
+    .report-page .page-top {
+      align-items: flex-start !important;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .report-page .stat-card {
+      padding: 14px;
+    }
+
+    .report-page .section-header {
+      padding: 16px;
+    }
+  }
+</style>
+
+<div class="container-fluid mt-4 report-page">
+
+  <!-- HEADER -->
+  <div class="d-flex justify-content-between align-items-center page-top mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge rounded-pill"
+              style="background:#e8f1f8;color:#0b3d63;">
+          <i class="bi bi-bar-chart-line me-1"></i> BÁO CÁO KỲ THI
+        </span>
+      </div>
+
+      <h2 class="page-heading mb-1">
+        {{ exam.title }}
+      </h2>
+
+      <p class="sub-heading mb-0">
+        Tổng hợp kết quả và hoạt động giám sát thí sinh
+      </p>
+    </div>
+
+    <a href="{% url 'teacher_exam_pdf' exam.id %}"
+       class="btn btn-stu px-4 py-2">
+      <i class="bi bi-file-earmark-pdf me-2"></i>
+      Xuất báo cáo PDF
     </a>
   </div>
-  <p class="fw-bold">
-    Sĩ số: <span>{{ total_students }}</span> · Đã nộp:
-    <span class="text-success">{{ submitted_count }}</span>
-  </p>
 
-  <table class="table table-bordered table-striped">
-    <thead class="table-dark">
-      <tr>
-        <th>STT</th>
-        <th>Mã sinh viên</th>
-        <th>Họ tên</th>
-        <th>Máy</th>
-        <th>Camera</th>
-        <th>Lớp hành chính</th>
-        <th>Khoa</th>
-        <th>Điểm số</th>
-        <th>Trạng thái</th>
-        <th>Thời gian nộp</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in roster %}
-      <tr>
-        <td>{{ forloop.counter }}</td>
-        <td>{{ row.profile.student_id|default:"N/A" }}</td>
-        <td>
-          {{ row.profile.user.get_full_name|default:row.profile.user.username }}
-        </td>
-        <td>{{ row.computer_label }}</td>
-        <td>{{ row.camera_status }}</td>
-        <td>{{ row.profile.class_name|default:"N/A" }}</td>
-        <td>{{ row.profile.get_faculty_display|default:"N/A" }}</td>
-        <td class="fw-bold text-primary">{{ row.score_label }}</td>
-        <td>{{ row.status }}</td>
-        <td>{{ row.attempt.finished_at|date:"d/m/Y H:i:s"|default:"-" }}</td>
-        <td>
-          {% if row.status == "Vắng" and row.computer %}
-          <form
-            method="post"
-            action="{% url 'reopen_exam_computer' row.computer.id %}"
-          >
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-outline-warning">
-              Xem xét / mở lại
-            </button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="11" class="text-center text-muted">
-          Lớp chưa có sinh viên ghi danh.
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <!-- STATISTICS -->
+  <div class="row g-3 mb-4">
 
-  <section class="mt-5">
-    <div class="d-flex justify-content-between align-items-end mb-3">
-      <div>
-        <p class="eyebrow mb-1">GIÁM SÁT</p>
-        <h3 class="h5 mb-0">Sự kiện cần xem xét</h3>
+    <div class="col-12 col-sm-6 col-xl-4">
+      <div class="report-card stat-card">
+        <div class="stat-icon"
+             style="background:#e8f1f8;color:#0b3d63;">
+          <i class="bi bi-people"></i>
+        </div>
+        <div>
+          <div class="stat-label">Tổng sĩ số</div>
+          <div class="stat-value">{{ total_students }}</div>
+        </div>
       </div>
-      <span class="text-muted small">Chỉ lưu frame tại thời điểm cảnh báo</span>
     </div>
+
+    <div class="col-12 col-sm-6 col-xl-4">
+      <div class="report-card stat-card">
+        <div class="stat-icon"
+             style="background:#e7f7ee;color:#16834a;">
+          <i class="bi bi-check-circle"></i>
+        </div>
+        <div>
+          <div class="stat-label">Đã nộp bài</div>
+          <div class="stat-value">{{ submitted_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-4">
+      <div class="report-card stat-card">
+        <div class="stat-icon"
+             style="background:#fff5df;color:#a66a00;">
+          <i class="bi bi-hourglass-split"></i>
+        </div>
+        <div>
+          <div class="stat-label">Chưa nộp / chưa có lượt thi</div>
+          <div class="stat-value">
+            {{ total_students|add:"-"|add:submitted_count }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- STUDENT RESULTS -->
+  <div class="report-card mb-4">
+
+    <div class="section-header d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="section-title">
+          <i class="bi bi-clipboard-data me-2"></i>
+          Kết quả sinh viên
+        </h3>
+        <div class="section-description">
+          Danh sách sinh viên và tình trạng tham gia kỳ thi
+        </div>
+      </div>
+
+      <span class="badge rounded-pill bg-light text-secondary border">
+        {{ total_students }} sinh viên
+      </span>
+    </div>
+
     <div class="table-responsive">
-      <table class="table table-sm table-hover align-middle">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th class="text-center">STT</th>
+            <th>Mã sinh viên</th>
+            <th>Họ và tên</th>
+            <th>Máy thi</th>
+            <th>Camera</th>
+            <th>Lớp</th>
+            <th>Khoa</th>
+            <th>Điểm</th>
+            <th>Trạng thái</th>
+            <th>Thời gian nộp</th>
+            <th class="text-center">Thao tác</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for row in roster %}
+          <tr>
+            <td class="text-center text-muted">
+              {{ forloop.counter }}
+            </td>
+
+            <td>
+              <span class="student-code">
+                {{ row.profile.student_id|default:"N/A" }}
+              </span>
+            </td>
+
+            <td>
+              <span class="student-name">
+                {{ row.profile.user.get_full_name|default:row.profile.user.username }}
+              </span>
+            </td>
+
+            <td>{{ row.computer_label }}</td>
+
+            <td>{{ row.camera_status }}</td>
+
+            <td>{{ row.profile.class_name|default:"N/A" }}</td>
+
+            <td>{{ row.profile.get_faculty_display|default:"N/A" }}</td>
+
+            <td>
+              <span class="score-value">
+                {{ row.score_label }}
+              </span>
+            </td>
+
+            <td>
+              {% if row.status == "Đã nộp" %}
+                <span class="status-badge status-success">
+                  <i class="bi bi-check-circle-fill"></i>
+                  {{ row.status }}
+                </span>
+              {% elif row.status == "Vắng" %}
+                <span class="status-badge status-warning">
+                  <i class="bi bi-exclamation-circle-fill"></i>
+                  {{ row.status }}
+                </span>
+              {% else %}
+                <span class="status-badge status-neutral">
+                  <i class="bi bi-clock"></i>
+                  {{ row.status }}
+                </span>
+              {% endif %}
+            </td>
+
+            <td class="text-nowrap">
+              {{ row.attempt.finished_at|date:"d/m/Y H:i:s"|default:"-" }}
+            </td>
+
+            <td class="text-center">
+              {% if row.status == "Vắng" and row.computer %}
+              <form method="post"
+                    action="{% url 'reopen_exam_computer' row.computer.id %}"
+                    onsubmit="return confirm('Bạn có chắc chắn muốn xem xét và mở lại máy thi này?');">
+                {% csrf_token %}
+                <button type="submit"
+                        class="btn btn-sm btn-outline-warning text-nowrap">
+                  <i class="bi bi-unlock me-1"></i>
+                  Mở lại
+                </button>
+              </form>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+          </tr>
+
+          {% empty %}
+          <tr>
+            <td colspan="11">
+              <div class="empty-state">
+                <i class="bi bi-people"></i>
+                <div class="fw-semibold">Chưa có sinh viên ghi danh</div>
+                <small>Danh sách sinh viên sẽ hiển thị tại đây.</small>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PROCTOR EVENTS -->
+  <div class="report-card">
+
+    <div class="section-header d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="section-title">
+          <i class="bi bi-shield-exclamation me-2"></i>
+          Sự kiện giám sát cần xem xét
+        </h3>
+        <div class="section-description">
+          Các sự kiện được hệ thống ghi nhận trong quá trình thi
+        </div>
+      </div>
+
+      <span class="badge rounded-pill"
+            style="background:#fff5df;color:#a66a00;">
+        <i class="bi bi-camera me-1"></i>
+        Chỉ lưu frame tại thời điểm cảnh báo
+      </span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover event-table">
         <thead>
           <tr>
             <th>Thời điểm</th>
@@ -86,71 +451,124 @@
             <th>Thời lượng</th>
             <th>Bằng chứng</th>
             <th>Trạng thái</th>
-            <th></th>
+            <th>Thao tác xem xét</th>
           </tr>
         </thead>
+
         <tbody>
           {% for event in proctor_events %}
           <tr>
-            <td>{{ event.created_at|date:"d/m/Y H:i:s" }}</td>
-            <td>
-              {{
-              event.student_exam.student.get_full_name|default:event.student_exam.student.username
-              }}
+            <td class="text-nowrap">
+              {{ event.created_at|date:"d/m/Y H:i:s" }}
             </td>
+
             <td>
-              {% if event.exam_computer %}PC{{
-              event.exam_computer.computer_number|stringformat:"02d" }}{% else
-              %}-{% endif %}
+              <span class="student-name">
+                {{ event.student_exam.student.get_full_name|default:event.student_exam.student.username }}
+              </span>
             </td>
-            <td>{{ event.get_event_type_display }}</td>
+
             <td>
-              {% if event.confidence is not None %}{{
-              event.confidence|floatformat:2 }}{% else %}-{% endif %}
+              {% if event.exam_computer %}
+                PC{{ event.exam_computer.computer_number|stringformat:"02d" }}
+              {% else %}
+                -
+              {% endif %}
             </td>
+
+            <td>
+              <span class="event-type">
+                {{ event.get_event_type_display }}
+              </span>
+            </td>
+
+            <td>
+              <span class="event-confidence">
+                {% if event.confidence is not None %}
+                  {{ event.confidence|floatformat:2 }}
+                {% else %}
+                  -
+                {% endif %}
+              </span>
+            </td>
+
             <td>{{ event.duration_seconds }} giây</td>
+
             <td>
-              {% if event.evidence_image %}<a
-                href="{{ event.evidence_image.url }}"
-                target="_blank"
-                rel="noopener"
-                >Xem frame</a
-              >{% else %}-{% endif %}
+              {% if event.evidence_image %}
+                <a href="{{ event.evidence_image.url }}"
+                   target="_blank"
+                   rel="noopener"
+                   class="text-primary text-decoration-none fw-semibold">
+                  <i class="bi bi-image me-1"></i>
+                  Xem frame
+                </a>
+              {% else %}
+                <span class="text-muted">Không có</span>
+              {% endif %}
             </td>
+
             <td>
-              {% if event.reviewed_at %}Đã xem{% else %}Chờ xem{% endif %}
+              {% if event.reviewed_at %}
+                <span class="status-badge status-success">
+                  <i class="bi bi-check-circle-fill"></i>
+                  Đã xem
+                </span>
+              {% else %}
+                <span class="status-badge status-warning">
+                  <i class="bi bi-eye"></i>
+                  Chờ xem
+                </span>
+              {% endif %}
             </td>
+
             <td>
               {% if not event.reviewed_at %}
-              <form
-                method="post"
-                action="{% url 'review_proctor_event' event.id %}"
-              >
+              <form method="post"
+                    action="{% url 'review_proctor_event' event.id %}"
+                    class="review-form">
                 {% csrf_token %}
-                <input
-                  type="text"
-                  name="review_note"
-                  class="form-control form-control-sm mb-1"
-                  maxlength="2000"
-                  placeholder="Ghi chú xem xét"
-                />
-                <button type="submit" class="btn btn-sm btn-outline-primary">
+
+                <input type="text"
+                       name="review_note"
+                       class="form-control form-control-sm mb-2"
+                       maxlength="2000"
+                       placeholder="Ghi chú xem xét (không bắt buộc)">
+
+                <button type="submit"
+                        class="btn btn-sm btn-outline-primary w-100">
+                  <i class="bi bi-check2-circle me-1"></i>
                   Đánh dấu đã xem
                 </button>
               </form>
+              {% else %}
+                <span class="text-muted small">
+                  Đã hoàn tất xem xét
+                </span>
               {% endif %}
             </td>
           </tr>
+
           {% empty %}
           <tr>
-            <td colspan="9" class="text-muted py-3">
-              Chưa có sự kiện vi phạm được ghi nhận.
+            <td colspan="9">
+              <div class="empty-state">
+                <i class="bi bi-shield-check"></i>
+                <div class="fw-semibold">
+                  Chưa có sự kiện cần xem xét
+                </div>
+                <small>
+                  Các sự kiện giám sát sẽ được hiển thị tại đây khi hệ thống ghi nhận.
+                </small>
+              </div>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-  </section>
+  </div>
+
 </div>
+
 {% endblock %}

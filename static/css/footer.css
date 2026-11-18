@@ -1,0 +1,26 @@
+/* static/css/footer.css - Footer đồng bộ thương hiệu STU */
+.stu-footer {
+  margin-top: 2rem;
+  padding: 1.1rem 0;
+  color: #e6edf9;
+  background: linear-gradient(120deg, #003d99, #0056cc);
+  border-top: 3px solid #38bdf8;
+  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+}
+.stu-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.stu-footer-brand { display: flex; align-items: center; gap: 0.6rem; color: #fff; }
+.stu-footer-brand img { object-fit: contain; transition: transform 0.3s ease; }
+.stu-footer-brand:hover img { transform: rotate(-8deg) scale(1.08); }
+.stu-footer-copy { font-size: 0.85rem; opacity: 0.85; }
+@media (max-width: 576px) {
+  .stu-footer-inner { flex-direction: column; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stu-footer-brand img { transition: none; }
+}

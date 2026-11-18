@@ -102,6 +102,16 @@
 
     </a>
 
+    {% if request.user.userprofile.role == "lecturer" or request.user.userprofile.role == "admin" %}
+      <a
+        href="{% url 'face_attendance' %}"
+        class="{% if request.resolver_match.url_name == 'face_attendance' %}active{% endif %}"
+      >
+        <i class="bi bi-person-check"></i>
+        <span>Điểm danh khuôn mặt</span>
+      </a>
+    {% endif %}
+
 
     <!-- =======================================================
          KẾT QUẢ CỦA SINH VIÊN
@@ -199,6 +209,32 @@
     {% endif %}
 
   </nav>
+
+
+  <!-- =========================================================
+       HAMSTER (trang trí, hiệu ứng từ Uiverse)
+       ========================================================= -->
+
+  <div class="sidebar-pet" aria-hidden="true">
+    <div aria-label="Orange and tan hamster running in a metal wheel" role="img" class="wheel-and-hamster">
+      <div class="wheel"></div>
+      <div class="hamster">
+        <div class="hamster__body">
+          <div class="hamster__head">
+            <div class="hamster__ear"></div>
+            <div class="hamster__eye"></div>
+            <div class="hamster__nose"></div>
+          </div>
+          <div class="hamster__limb hamster__limb--fr"></div>
+          <div class="hamster__limb hamster__limb--fl"></div>
+          <div class="hamster__limb hamster__limb--br"></div>
+          <div class="hamster__limb hamster__limb--bl"></div>
+          <div class="hamster__tail"></div>
+        </div>
+      </div>
+      <div class="spoke"></div>
+    </div>
+  </div>
 
 
   <!-- =========================================================

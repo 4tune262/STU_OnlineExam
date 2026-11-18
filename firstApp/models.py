@@ -8,6 +8,9 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.files import File
 from django.db import models
+from django.utils import timezone
+
+
 # Create your models here.
 # =====================================
 # USER PROFILE
@@ -531,7 +534,34 @@ class Exam(models.Model):
         auto_now=True,
         verbose_name="Cập nhật lần cuối",
     )
+    # ========================================================
+    # HÌNH THỨC THI
+    # ========================================================
 
+    EXAM_TYPE_CLASSROOM = "classroom"
+    EXAM_TYPE_AT_HOME = "at_home"
+
+    EXAM_TYPE_CHOICES = [
+        (
+            EXAM_TYPE_CLASSROOM,
+            "Thi tại lớp",
+        ),
+        (
+            EXAM_TYPE_AT_HOME,
+            "Thi tại nhà",
+        ),
+    ]
+
+    exam_type = models.CharField(
+        max_length=20,
+        choices=EXAM_TYPE_CHOICES,
+        default=EXAM_TYPE_AT_HOME,
+        verbose_name="Hình thức thi",
+        help_text=(
+            "Thi tại lớp yêu cầu điểm danh khuôn mặt; "
+            "thi tại nhà không yêu cầu điểm danh."
+        ),
+    )
     def clean(self):
         super().clean()
 
@@ -563,6 +593,283 @@ class Exam(models.Model):
     def __str__(self):
         return self.title
 
+
+
+# ==========================================================
+# EXAM PAPER - PHIÊN BẢN ĐỀ THI
+# ==========================================================
+
+class ExamPaper(models.Model):
+    """
+    Một bài thi có thể có nhiều phiên bản đề.
+
+    Ví dụ:
+    Bài thi giữa kỳ:
+        - Mã đề 101
+        - Mã đề 102
+        - Mã đề 103
+
+    Mỗi phiên bản lưu bộ câu hỏi riêng.
+    """
+
+    exam = models.ForeignKey(
+        Exam,
+        on_delete=models.CASCADE,
+        related_name="papers",
+        verbose_name="Bài thi",
+    )
+
+    paper_number = models.PositiveIntegerField(
+        verbose_name="Số thứ tự phiên bản",
+    )
+
+    paper_code = models.CharField(
+        max_length=50,
+        verbose_name="Mã đề",
+    )
+
+    title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name="Tên phiên bản",
+    )
+
+    question_data = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Dữ liệu câu hỏi",
+    )
+
+    copied_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copied_papers",
+        verbose_name="Sao chép từ phiên bản",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Đang sử dụng",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Ngày tạo",
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Cập nhật lần cuối",
+    )
+
+    class Meta:
+        ordering = ("exam", "paper_number")
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=("exam", "paper_number"),
+                name="unique_exam_paper_number",
+            ),
+            models.UniqueConstraint(
+                fields=("exam", "paper_code"),
+                name="unique_exam_paper_code",
+            ),
+        ]
+
+        verbose_name = "Phiên bản đề thi"
+        verbose_name_plural = "Các phiên bản đề thi"
+
+    def clean(self):
+        super().clean()
+
+        if self.paper_number < 1:
+            raise ValidationError({
+                "paper_number": "Số thứ tự phiên bản phải lớn hơn 0."
+            })
+
+        if not self.paper_code.strip():
+            raise ValidationError({
+                "paper_code": "Mã đề không được để trống."
+            })
+
+        if not isinstance(self.question_data, list):
+            raise ValidationError({
+                "question_data": "Dữ liệu câu hỏi phải là một danh sách."
+            })
+
+    def __str__(self):
+        return f"{self.exam.title} - Mã đề {self.paper_code}"
+
+
+
+
+
+# ==========================================================
+# EXAM ASSIGNMENT - PHÂN CÔNG ĐỀ THI
+# ==========================================================
+
+class ExamAssignment(models.Model):
+    """
+    Phân công một phiên bản đề cho một sinh viên.
+
+    Hỗ trợ:
+        - manual: Giảng viên phân công thủ công.
+        - random: Hệ thống phân công ngẫu nhiên.
+    """
+
+    METHOD_CHOICES = (
+        ("manual", "Phân công thủ công"),
+        ("random", "Phân công ngẫu nhiên"),
+    )
+
+    exam = models.ForeignKey(
+        Exam,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+        verbose_name="Bài thi",
+    )
+
+    paper = models.ForeignKey(
+        ExamPaper,
+        on_delete=models.PROTECT,
+        related_name="assignments",
+        verbose_name="Phiên bản đề",
+    )
+
+    student = models.ForeignKey(
+        UserProfile,
+        on_delete=models.PROTECT,
+        related_name="exam_assignments",
+        limit_choices_to={"role": "student"},
+        verbose_name="Sinh viên",
+    )
+
+    assigned_by = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_exam_assignments",
+        verbose_name="Người phân công",
+    )
+
+    assignment_method = models.CharField(
+        max_length=20,
+        choices=METHOD_CHOICES,
+        default="manual",
+        verbose_name="Phương thức phân công",
+    )
+
+    assigned_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Thời điểm phân công",
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Cập nhật lần cuối",
+    )
+
+    class Meta:
+        ordering = ("student",)
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=("exam", "student"),
+                name="unique_student_exam_assignment",
+            )
+        ]
+
+        verbose_name = "Phân công đề thi"
+        verbose_name_plural = "Danh sách phân công đề thi"
+
+    def clean(self):
+        super().clean()
+
+        if self.exam_id and self.paper_id:
+            if self.paper.exam_id != self.exam_id:
+                raise ValidationError({
+                    "paper": (
+                        "Phiên bản đề không thuộc bài thi "
+                        "được phân công."
+                    )
+                })
+
+            if not self.paper.is_active:
+                raise ValidationError({
+                    "paper": "Phiên bản đề này đã ngừng sử dụng."
+                })
+
+        if self.student_id:
+            if self.student.role != "student":
+                raise ValidationError({
+                    "student": "Chỉ được phân công cho sinh viên."
+                })
+
+        # Sinh viên phải được ghi danh vào lớp học phần
+        # tương ứng với môn học của bài thi.
+
+        # Sinh viên phải được ghi danh đúng lớp học phần
+        # mà bài thi đang sử dụng.
+        if self.exam_id and self.student_id:
+
+            if not self.exam.offering_id:
+                raise ValidationError({
+                    "exam": (
+                        "Bài thi chưa được gắn với lớp học phần."
+                    )
+                })
+
+            enrollment_exists = Enrollment.objects.filter(
+                course_offering_id=self.exam.offering_id,
+                student_id=self.student_id,
+                status="active",
+            ).exists()
+
+            if not enrollment_exists:
+                raise ValidationError({
+                    "student": (
+                        "Sinh viên chưa được ghi danh vào "
+                        "lớp học phần của bài thi."
+                    )
+                })
+
+
+        # Không cho thay đổi phiên bản đề sau khi sinh viên
+        # đã bắt đầu lượt thi.
+        if self.pk:
+            old_assignment = (
+                ExamAssignment.objects
+                .filter(pk=self.pk)
+                .first()
+            )
+
+            if old_assignment:
+                paper_changed = old_assignment.paper_id != self.paper_id
+
+                if paper_changed:
+                    started = StudentExam.objects.filter(
+                        exam_id=self.exam_id,
+                        student_id=self.student.user_id,
+                    ).exists()
+
+                    if started:
+                        raise ValidationError({
+                            "paper": (
+                                "Không thể đổi đề vì sinh viên "
+                                "đã có lượt thi."
+                            )
+                        })
+
+    def __str__(self):
+        return (
+            f"{self.student.user.username} - "
+            f"{self.exam.title} - "
+            f"{self.paper.paper_code}"
+        )
 
 
 
@@ -1073,6 +1380,29 @@ class StudentExam(models.Model):
 
     )
 
+
+
+    paper = models.ForeignKey(
+        ExamPaper,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="student_exams",
+        verbose_name="Phiên bản đề được làm",
+    )
+
+    assignment = models.ForeignKey(
+        ExamAssignment,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="student_exams",
+        verbose_name="Phân công đề",
+    )
+
+
+
+
     exam_computer = models.ForeignKey(
         ExamComputer,
         on_delete=models.SET_NULL,
@@ -1388,3 +1718,125 @@ class FaceProfile(models.Model):
         return f"Khuôn mặt - {self.user_profile.user.username}"
 
 
+
+class TOTPDevice(models.Model):
+    """
+    Lưu cấu hình TOTP riêng cho từng hồ sơ người dùng.
+    Khóa bí mật được mã hóa trước khi lưu vào secret_encrypted.
+    """
+
+    profile = models.OneToOneField(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="totp_device",
+        verbose_name="Hồ sơ người dùng",
+    )
+
+    secret_encrypted = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Khóa TOTP đã mã hóa",
+    )
+
+    is_enabled = models.BooleanField(
+        default=False,
+        verbose_name="Đã kích hoạt TOTP",
+    )
+
+    last_verified_counter = models.BigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Bộ đếm TOTP gần nhất đã sử dụng",
+    )
+
+    failed_attempts = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Số lần xác minh thất bại",
+    )
+
+    locked_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Thời điểm hết khóa tạm thời",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Ngày tạo",
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Ngày cập nhật",
+    )
+
+    class Meta:
+        verbose_name = "Thiết bị xác thực TOTP"
+        verbose_name_plural = "Thiết bị xác thực TOTP"
+
+    def __str__(self):
+        return f"TOTP - {self.profile.user.username}"
+
+
+
+
+
+# ==========================================
+# EXAM ATTENDANCE - ĐIỂM DANH KHUÔN MẶT
+# ==========================================
+
+class ExamAttendance(models.Model):
+    """
+    Lưu kết quả điểm danh của sinh viên cho từng đề thi.
+    Chỉ tạo bản ghi sau khi máy chủ xác minh thành công.
+    """
+
+    METHOD_FACE = "face"
+
+    METHOD_CHOICES = [
+        (METHOD_FACE, "Nhận diện khuôn mặt"),
+    ]
+
+    exam = models.ForeignKey(
+        "Exam",
+        on_delete=models.CASCADE,
+        related_name="attendances",
+        verbose_name="Đề thi",
+    )
+
+    student = models.ForeignKey(
+        "UserProfile",
+        on_delete=models.CASCADE,
+        related_name="exam_attendances",
+        limit_choices_to={"role": "student"},
+        verbose_name="Sinh viên",
+    )
+
+    checked_in_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Thời điểm điểm danh",
+    )
+
+    method = models.CharField(
+        max_length=20,
+        choices=METHOD_CHOICES,
+        default=METHOD_FACE,
+        verbose_name="Phương thức điểm danh",
+    )
+
+    class Meta:
+        verbose_name = "Điểm danh thi"
+        verbose_name_plural = "Điểm danh thi"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["exam", "student"],
+                name="unique_exam_attendance_student",
+            ),
+        ]
+        ordering = ["-checked_in_at"]
+
+    def __str__(self):
+        return (
+            f"{self.student.user.username} - "
+            f"{self.exam.title}"
+        )

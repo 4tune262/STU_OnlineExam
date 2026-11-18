@@ -618,6 +618,39 @@ Admin {% endblock %} {% block extrastyle %} {{ block.super }}
     </div>
   </div>
 
+        <!-- HÌNH THỨC THI -->
+
+      <div class="form-group">
+        <label for="exam-type">
+          <strong>Hình thức thi</strong>
+        </label>
+
+        <select
+          id="exam-type"
+          name="exam_type"
+          style="width: 100%; margin-top: 6px"
+        >
+          <option
+            value="at_home"
+            {% if not exam or exam.exam_type == "at_home" %}selected{% endif %}
+          >
+            Thi tại nhà
+          </option>
+
+          <option
+            value="classroom"
+            {% if exam and exam.exam_type == "classroom" %}selected{% endif %}
+          >
+            Thi tại lớp
+          </option>
+        </select>
+
+        <p class="form-help">
+          Thi tại lớp yêu cầu điểm danh khuôn mặt trước khi vào thi.
+          Thi tại nhà không yêu cầu điểm danh khuôn mặt.
+        </p>
+      </div>
+
   <!-- =====================================================
          CÂU HỎI
          ===================================================== -->
@@ -685,6 +718,8 @@ Admin {% endblock %} {% block extrastyle %} {{ block.super }}
     <input type="hidden" name="end_time" id="save-end" />
 
     <input type="hidden" name="number_of_papers" id="save-papers" />
+
+    <input type="hidden" name="exam_type" id="save-exam-type" />
 
     <input type="hidden" name="question_data" id="save-question-data" />
   </form>
@@ -1557,6 +1592,13 @@ Admin {% endblock %} {% block extrastyle %} {{ block.super }}
                           C++
                       </option>
 
+                      <option
+                          value="php"
+                          ${language === "php" ? "selected" : ""}
+                      >
+                          PHP
+                      </option>
+
                   </select>
 
               </div>
@@ -2320,6 +2362,12 @@ Admin {% endblock %} {% block extrastyle %} {{ block.super }}
                   "save-papers"
               ).value = papers;
 
+
+              document.getElementById(
+                  "save-exam-type"
+              ).value = document.getElementById(
+                  "exam-type"
+              ).value;
 
               document.getElementById(
                   "save-question-data"

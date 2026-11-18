@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_block %}
+<link rel="stylesheet" href="{% static 'css/teacher_exam_assignment_form.css' %}">
+
+<div class="assignment-edit-page">
+
+    <!-- HEADER -->
+    <header class="assignment-edit-hero">
+        <div class="assignment-edit-breadcrumb">
+            <a href="{% url 'teacher_exam_assignments' exam.id %}">
+                <i class="bi bi-arrow-left"></i>
+                Danh sách phân công
+            </a>
+            <span class="assignment-edit-breadcrumb__separator">/</span>
+            <span>Chỉnh sửa phân công</span>
+        </div>
+
+        <div class="assignment-edit-hero__main">
+            <div class="assignment-edit-hero__copy">
+                <span class="assignment-edit-eyebrow">QUẢN LÝ PHÂN CÔNG ĐỀ THI</span>
+                <h1>Chỉnh sửa phân công đề</h1>
+                <p>
+                    Thay đổi phiên bản đề được giao cho sinh viên mà không làm thay đổi
+                    thông tin sinh viên hoặc phương thức phân công.
+                </p>
+                <div class="assignment-edit-exam">
+                    <span class="assignment-edit-exam__icon">
+                        <i class="bi bi-journal-text"></i>
+                    </span>
+                    <span>
+                        <small>Bài thi</small>
+                        <strong>{{ exam.title }}</strong>
+                    </span>
+                </div>
+            </div>
+
+            <div class="assignment-edit-hero__icon" aria-hidden="true">
+                <i class="bi bi-pencil-square"></i>
+            </div>
+        </div>
+    </header>
+
+    <main class="assignment-edit-layout">
+
+        <!-- STUDENT / ASSIGNMENT DETAILS -->
+        <section class="assignment-edit-card assignment-edit-details">
+            <div class="assignment-edit-card__heading">
+                <div class="assignment-edit-heading-icon assignment-edit-heading-icon--blue">
+                    <i class="bi bi-person-vcard"></i>
+                </div>
+                <div>
+                    <span class="assignment-edit-kicker">THÔNG TIN HIỆN TẠI</span>
+                    <h2>Thông tin sinh viên</h2>
+                    <p>Các thông tin này được giữ nguyên trong lần chỉnh sửa.</p>
+                </div>
+                <span class="assignment-edit-readonly">
+                    <i class="bi bi-lock-fill"></i>
+                    Chỉ xem
+                </span>
+            </div>
+
+            <div class="assignment-edit-info-grid">
+                <div class="assignment-edit-info-item">
+                    <span class="assignment-edit-info-label">
+                        <i class="bi bi-card-heading"></i>
+                        Mã sinh viên
+                    </span>
+                    <strong class="assignment-edit-info-value">
+                        {{ assignment.student.student_id|default:assignment.student.user.username }}
+                    </strong>
+                </div>
+
+                <div class="assignment-edit-info-item">
+                    <span class="assignment-edit-info-label">
+                        <i class="bi bi-person"></i>
+                        Họ và tên
+                    </span>
+                    <strong class="assignment-edit-info-value">
+                        {{ assignment.student.user.get_full_name|default:assignment.student.user.username }}
+                    </strong>
+                </div>
+
+                <div class="assignment-edit-info-item">
+                    <span class="assignment-edit-info-label">
+                        <i class="bi bi-at"></i>
+                        Tên đăng nhập
+                    </span>
+                    <strong class="assignment-edit-info-value assignment-edit-info-value--mono">
+                        {{ assignment.student.user.username }}
+                    </strong>
+                </div>
+
+                <div class="assignment-edit-info-item">
+                    <span class="assignment-edit-info-label">
+                        <i class="bi bi-diagram-2"></i>
+                        Phương thức phân công
+                    </span>
+                    <strong class="assignment-edit-method">
+                        <i class="bi bi-shield-check"></i>
+                        {{ assignment.get_assignment_method_display }}
+                    </strong>
+                </div>
+            </div>
+
+            <div class="assignment-edit-protection-note">
+                <span class="assignment-edit-protection-note__icon">
+                    <i class="bi bi-info-circle"></i>
+                </span>
+                <p>
+                    <strong>Thông tin được bảo toàn.</strong>
+                    Sinh viên nhận đề và phương thức phân công sẽ không thay đổi.
+                    Chỉ phiên bản đề được cập nhật sau khi bạn lưu.
+                </p>
+            </div>
+        </section>
+
+        <!-- PAPER SELECTION -->
+        <section class="assignment-edit-card assignment-edit-paper-card">
+            <div class="assignment-edit-card__heading">
+                <div class="assignment-edit-heading-icon assignment-edit-heading-icon--green">
+                    <i class="bi bi-file-earmark-diff"></i>
+                </div>
+                <div>
+                    <span class="assignment-edit-kicker">NỘI DUNG CẦN THAY ĐỔI</span>
+                    <h2>Phiên bản đề được giao</h2>
+                    <p>Chọn phiên bản đề mới áp dụng cho sinh viên này.</p>
+                </div>
+            </div>
+
+            <form method="POST" class="assignment-edit-form">
+                {% csrf_token %}
+
+                <div class="assignment-edit-select-panel">
+                    <label for="assignmentPaper" class="assignment-edit-select-label">
+                        <span>Phiên bản đề mới</span>
+                        <span class="assignment-edit-required">Bắt buộc</span>
+                    </label>
+
+                    <div class="assignment-edit-select-wrap">
+                        <span class="assignment-edit-select-leading">
+                            <i class="bi bi-file-earmark-text"></i>
+                        </span>
+                        <select
+                            name="paper_id"
+                            id="assignmentPaper"
+                            class="assignment-edit-select"
+                            required
+                        >
+                            <option value="">
+                                -- Chọn phiên bản đề --
+                            </option>
+
+                            {% for paper in papers %}
+                            <option
+                                value="{{ paper.id }}"
+                                {% if paper.id == selected_paper_id %}selected{% endif %}
+                            >
+                                {{ paper.paper_code }} - {{ paper.title|default:"Chưa đặt tên" }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <i class="bi bi-chevron-down assignment-edit-select-chevron"></i>
+                    </div>
+
+                    <div class="assignment-edit-select-hint">
+                        <i class="bi bi-check-circle"></i>
+                        Chỉ hiển thị các phiên bản đề đang hoạt động thuộc bài thi hiện tại.
+                    </div>
+                </div>
+
+                <div class="assignment-edit-action-bar">
+                    <div class="assignment-edit-action-note">
+                        <i class="bi bi-exclamation-circle"></i>
+                        Kiểm tra mã đề trước khi lưu thay đổi.
+                    </div>
+                    <div class="assignment-edit-actions">
+                        <a
+                            href="{% url 'teacher_exam_assignments' exam.id %}"
+                            class="assignment-edit-button assignment-edit-button--cancel"
+                        >
+                            Hủy
+                        </a>
+                        <button type="submit" class="assignment-edit-button assignment-edit-button--save">
+                            <i class="bi bi-check2-circle"></i>
+                            Lưu thay đổi
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+    </main>
+
+    <footer class="assignment-edit-footer">
+        <a href="{% url 'teacher_exam_assignments' exam.id %}">
+            <i class="bi bi-arrow-left"></i>
+            Quay lại danh sách phân công
+        </a>
+        <span>
+            <i class="bi bi-lock"></i>
+            Chỉ phiên bản đề được phép thay đổi
+        </span>
+    </footer>
+
+</div>
+{% endblock %}

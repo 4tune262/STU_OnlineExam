@@ -1,50 +1,248 @@
-{% extends "base.html" %} {% block body_block %}
-<div class="container mt-4 mb-5">
-  <h2 class="mb-4"><i class="bi bi-pencil-square"></i> Danh sách bài thi</h2>
-  <div class="row">
-    {% for exam in exams %}
-    <div class="col-md-4 mb-4">
-      <div class="card shadow-sm h-100">
-        <div class="card-body d-flex flex-column">
-          <h5 class="card-title text-primary fw-bold">{{ exam.title }}</h5>
-          <p class="card-text text-muted mb-1">
-            Môn học: {{ exam.course.name }}
-          </p>
-          {% if exam.offering %}
-          <p class="card-text text-muted mb-1">
-            Nhóm: {{ exam.offering.group_code }} · {{ exam.offering.term }} · Ca
-            {{ exam.offering.session_number }}
-          </p>
-          {% endif %}
-          <p class="card-text text-muted mb-3">
-            Thời gian: {{ exam.duration_minutes }} phút
-          </p>
-          <div class="mt-auto">
-            <a
-              href="{% url 'take_exam' exam.id %}"
-              class="btn btn-success w-100"
-            >
-              <i class="bi bi-play-circle"></i> Bắt đầu làm bài
-            </a>
-            {% if exam.offering and user.userprofile.role != "student" %}
-            <a
-              href="{% url 'teacher_exam_submissions' exam.id %}"
-              class="btn btn-outline-primary w-100 mt-2"
-            >
-              <i class="bi bi-people"></i> Kết quả lớp
-            </a>
-            {% endif %}
-          </div>
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_block %}
+
+<link rel="stylesheet" href="{% static 'css/exam.css' %}">
+
+<div class="exam-page exam-list-page">
+
+    <!-- PAGE HEADER -->
+    <div class="exam-page-header">
+
+        <div class="exam-page-heading">
+
+            <div class="exam-page-eyebrow">
+                STU ONLINE EXAMINATION
+            </div>
+
+            <h2 class="exam-page-title">
+                <i class="bi bi-pencil-square"></i>
+                Danh sách bài thi
+            </h2>
+
+            <p class="exam-page-description">
+                Theo dõi các bài thi và truy cập các chức năng
+                làm bài, quản lý kết quả và phiên bản đề thi.
+            </p>
+
         </div>
-      </div>
+
+        <div class="exam-page-summary">
+
+            <div class="exam-summary-icon">
+                <i class="bi bi-journal-text"></i>
+            </div>
+
+            <div>
+                <span>Tổng số bài thi</span>
+                <strong>{{ exams|length }}</strong>
+            </div>
+
+        </div>
+
     </div>
-    {% empty %}
-    <div class="col-12">
-      <div class="alert alert-info text-center">
-        Chưa có bài thi nào được mở.
-      </div>
+
+
+    <!-- EXAM LIST -->
+    <div class="exam-grid">
+
+        {% for exam in exams %}
+
+        <article class="exam-card">
+
+            <!-- CARD HEADER -->
+            <div class="exam-card-header">
+
+                <div class="exam-card-icon">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+
+                <span class="exam-card-label">
+                    BÀI THI
+                </span>
+
+            </div>
+
+
+            <!-- TITLE -->
+            <div class="exam-card-content">
+
+                <h3 class="exam-card-title">
+                    {{ exam.title }}
+                </h3>
+
+                <div class="exam-card-meta">
+
+                    <div class="exam-meta-item">
+
+                        <span class="exam-meta-icon">
+                            <i class="bi bi-book"></i>
+                        </span>
+
+                        <div>
+                            <span class="exam-meta-label">
+                                Môn học
+                            </span>
+
+                            <strong>
+                                {{ exam.course.name }}
+                            </strong>
+                        </div>
+
+                    </div>
+
+
+                    {% if exam.offering %}
+
+                    <div class="exam-meta-item">
+
+                        <span class="exam-meta-icon">
+                            <i class="bi bi-people"></i>
+                        </span>
+
+                        <div>
+                            <span class="exam-meta-label">
+                                Nhóm học phần
+                            </span>
+
+                            <strong>
+                                {{ exam.offering.group_code }}
+                            </strong>
+                        </div>
+
+                    </div>
+
+
+                    <div class="exam-meta-item">
+
+                        <span class="exam-meta-icon">
+                            <i class="bi bi-calendar3"></i>
+                        </span>
+
+                        <div>
+                            <span class="exam-meta-label">
+                                Học kỳ
+                            </span>
+
+                            <strong>
+                                {{ exam.offering.term }}
+                            </strong>
+                        </div>
+
+                    </div>
+
+
+                    <div class="exam-meta-item">
+
+                        <span class="exam-meta-icon">
+                            <i class="bi bi-clock-history"></i>
+                        </span>
+
+                        <div>
+                            <span class="exam-meta-label">
+                                Ca học
+                            </span>
+
+                            <strong>
+                                Ca {{ exam.offering.session_number }}
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    {% endif %}
+
+
+                    <div class="exam-meta-item">
+
+                        <span class="exam-meta-icon">
+                            <i class="bi bi-stopwatch"></i>
+                        </span>
+
+                        <div>
+                            <span class="exam-meta-label">
+                                Thời gian làm bài
+                            </span>
+
+                            <strong>
+                                {{ exam.duration_minutes }} phút
+                            </strong>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- CARD ACTIONS -->
+            <div class="exam-card-actions">
+
+                <a
+                    href="{% url 'take_exam' exam.id %}"
+                    class="exam-action-button exam-action-primary"
+                >
+                    <i class="bi bi-play-circle"></i>
+
+                    <span>Bắt đầu làm bài</span>
+
+                    <i class="bi bi-arrow-right exam-action-arrow"></i>
+                </a>
+
+
+                {% if exam.offering and user.userprofile.role != "student" %}
+
+                <div class="exam-teacher-actions">
+
+                    <a
+                        href="{% url 'teacher_exam_submissions' exam.id %}"
+                        class="exam-action-button exam-action-secondary"
+                    >
+                        <i class="bi bi-people"></i>
+                        Kết quả lớp
+                    </a>
+
+
+                    <a
+                        href="{% url 'teacher_exam_papers' exam.id %}"
+                        class="exam-action-button exam-action-outline"
+                    >
+                        <i class="bi bi-files"></i>
+                        Quản lý phiên bản đề
+                    </a>
+
+                </div>
+
+                {% endif %}
+
+            </div>
+
+        </article>
+
+        {% empty %}
+
+        <!-- EMPTY STATE -->
+        <div class="exam-empty-state">
+
+            <div class="exam-empty-icon">
+                <i class="bi bi-journal-x"></i>
+            </div>
+
+            <h3>Chưa có bài thi nào</h3>
+
+            <p>
+                Hiện tại chưa có bài thi nào được mở.
+                Vui lòng quay lại sau.
+            </p>
+
+        </div>
+
+        {% endfor %}
+
     </div>
-    {% endfor %}
-  </div>
+
 </div>
+
 {% endblock %}

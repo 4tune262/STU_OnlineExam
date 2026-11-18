@@ -1,0 +1,738 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_block %}
+<link rel="stylesheet" href="{% static 'css/teacher_exam_paper_form.css' %}">
+
+<div class="tepf-page">
+    <header class="tepf-hero">
+        <div class="tepf-hero-main">
+            <div class="tepf-breadcrumb">
+                <span>Giảng viên</span><i class="bi bi-chevron-right"></i>
+                <span>Ngân hàng đề</span><i class="bi bi-chevron-right"></i>
+                <strong>{{ form_title }}</strong>
+            </div>
+            <div class="tepf-hero-title-row">
+                <div class="tepf-hero-symbol"><i class="bi bi-journal-bookmark-fill"></i></div>
+                <div>
+                    <div class="tepf-eyebrow">QUẢN LÝ NGÂN HÀNG ĐỀ THI</div>
+                    <h1>{{ form_title }}</h1>
+                    <p class="tepf-hero-subtitle">Thiết lập thông tin phiên bản và xây dựng nội dung câu hỏi cho bài thi.</p>
+                </div>
+            </div>
+            <div class="tepf-exam-context">
+                <span class="tepf-context-label"><i class="bi bi-file-earmark-text"></i> BÀI THI</span>
+                <strong>{{ exam.title }}</strong>
+            </div>
+        </div>
+        <a href="{% url 'teacher_exam_papers' exam.id %}" class="tepf-back-link">
+            <i class="bi bi-arrow-left"></i><span>Danh sách đề</span>
+        </a>
+        <div class="tepf-hero-decoration tepf-hero-decoration-one"></div>
+        <div class="tepf-hero-decoration tepf-hero-decoration-two"></div>
+    </header>
+
+    {% if source_paper %}
+    <section class="tepf-copy-notice" aria-label="Thông tin sao chép đề">
+        <div class="tepf-notice-icon"><i class="bi bi-copy"></i></div>
+        <div class="tepf-notice-content">
+            <strong>Bạn đang tạo một bản sao độc lập</strong>
+            <p>Nội dung được sao chép từ mã đề <b>{{ source_paper.paper_code }}</b>. Các thay đổi ở phiên bản này sẽ không ảnh hưởng đến đề gốc.</p>
+        </div>
+        <span class="tepf-notice-tag">BẢN SAO</span>
+    </section>
+    {% endif %}
+
+    <form method="POST" id="paperForm" class="tepf-form">
+        {% csrf_token %}
+
+        <section class="tepf-panel tepf-paper-info">
+            <div class="tepf-panel-heading">
+                <div class="tepf-step-number">01</div>
+                <div class="tepf-panel-heading-copy">
+                    <h2>Thông tin phiên bản đề</h2>
+                    <p>Đặt mã nhận diện và tên hiển thị để dễ quản lý các phiên bản đề thi.</p>
+                </div>
+                <span class="tepf-required-note"><span>*</span> Thông tin bắt buộc</span>
+            </div>
+
+            <div class="tepf-info-grid">
+                <div class="tepf-field">
+                    <label for="paperNumber" class="tepf-label">Số thứ tự phiên bản <span>*</span></label>
+                    <input id="paperNumber" type="number" name="paper_number" class="form-control tepf-control"
+                           min="1" value="{{ paper_number }}" placeholder="Ví dụ: 1" required>
+                    <small class="tepf-help">Dùng để phân biệt thứ tự các phiên bản trong cùng bài thi.</small>
+                </div>
+                <div class="tepf-field">
+                    <label for="paperCode" class="tepf-label">Mã đề <span>*</span></label>
+                    <input id="paperCode" type="text" name="paper_code" class="form-control tepf-control"
+                           maxlength="50" value="{{ paper_code }}" placeholder="Ví dụ: DE101" required>
+                    <small class="tepf-help">Nên ngắn gọn, dễ đọc và không trùng với mã đề khác.</small>
+                </div>
+                <div class="tepf-field tepf-field-full">
+                    <label for="paperTitle" class="tepf-label">Tên phiên bản <span class="tepf-optional">Không bắt buộc</span></label>
+                    <input id="paperTitle" type="text" name="title" class="form-control tepf-control"
+                           maxlength="200" value="{{ title }}" placeholder="Ví dụ: Đề thi giữa kỳ – Phiên bản 1">
+                    <small class="tepf-help">Tên gợi nhớ giúp giảng viên nhận biết nhanh nội dung hoặc mục đích của phiên bản.</small>
+                </div>
+            </div>
+        </section>
+
+        {% if show_question_data %}
+        <section class="tepf-builder-section">
+            <div class="tepf-builder-heading">
+                <div>
+                    <div class="tepf-section-kicker"><span class="tepf-step-number">02</span> XÂY DỰNG NỘI DUNG</div>
+                    <h2>Danh sách câu hỏi</h2>
+                    <p>Tạo câu hỏi, chọn dạng bài và thiết lập thang điểm cho từng câu.</p>
+                </div>
+                <button type="button" class="tepf-button tepf-button-add" id="addQuestionButton">
+                    <i class="bi bi-plus-lg"></i><span>Thêm câu hỏi</span>
+                </button>
+            </div>
+
+            <div class="tepf-summary-strip">
+                <div class="tepf-summary-item">
+                    <span class="tepf-summary-icon tepf-summary-icon-blue"><i class="bi bi-list-ol"></i></span>
+                    <span class="tepf-summary-copy"><small>Tổng số câu hỏi</small><strong id="questionCount">0</strong></span>
+                </div>
+                <div class="tepf-summary-divider"></div>
+                <div class="tepf-summary-item">
+                    <span class="tepf-summary-icon tepf-summary-icon-gold"><i class="bi bi-award"></i></span>
+                    <span class="tepf-summary-copy"><small>Tổng điểm dự kiến</small><strong><span id="totalScore">0</span><small class="tepf-score-unit">điểm</small></strong></span>
+                </div>
+                <div class="tepf-summary-hint"><i class="bi bi-info-circle"></i><span>Điểm câu CODE được tự động tính từ tổng điểm các Test Case.</span></div>
+            </div>
+
+            <div class="tepf-workspace">
+                <div class="tepf-question-column">
+                    <div id="builderError" class="tepf-builder-error d-none" role="alert" aria-live="assertive">
+                        <i class="bi bi-exclamation-triangle-fill"></i><span></span>
+                    </div>
+                    <div id="questionsContainer" class="tepf-questions-container"></div>
+                    <!-- JSON được JavaScript tạo tự động khi lưu biểu mẫu. -->
+                    <textarea name="question_data" id="questionDataInput" class="d-none">{{ question_data_text }}</textarea>
+                </div>
+
+                <aside class="tepf-guide-panel">
+                    <div class="tepf-guide-heading"><i class="bi bi-compass"></i><h3>Hướng dẫn nhanh</h3></div>
+                    <p class="tepf-guide-intro">Chọn dạng câu hỏi phù hợp với nội dung đánh giá.</p>
+                    <div class="tepf-type-guide-list">
+                        <div class="tepf-type-guide">
+                            <span class="tepf-type-guide-icon tepf-type-mcq"><i class="bi bi-ui-radios"></i></span>
+                            <div><strong>Trắc nghiệm</strong><small>Chọn một đáp án đúng trong các phương án.</small></div>
+                        </div>
+                        <div class="tepf-type-guide">
+                            <span class="tepf-type-guide-icon tepf-type-drag"><i class="bi bi-arrows-move"></i></span>
+                            <div><strong>Kéo thả</strong><small>Điền các mục vào vị trí trống trong mẫu.</small></div>
+                        </div>
+                        <div class="tepf-type-guide">
+                            <span class="tepf-type-guide-icon tepf-type-sort"><i class="bi bi-sort-numeric-down"></i></span>
+                            <div><strong>Sắp xếp</strong><small>Sắp xếp các dòng hoặc bước theo đúng thứ tự.</small></div>
+                        </div>
+                        <div class="tepf-type-guide">
+                            <span class="tepf-type-guide-icon tepf-type-code"><i class="bi bi-code-slash"></i></span>
+                            <div><strong>Lập trình</strong><small>Chấm điểm tự động bằng các bộ kiểm thử.</small></div>
+                        </div>
+                    </div>
+                    <div class="tepf-guide-reminder">
+                        <i class="bi bi-lightbulb"></i>
+                        <div><strong>Lưu ý trước khi lưu</strong><p>Kiểm tra nội dung, đáp án đúng và điểm số. Với câu kéo thả, các vị trí <code>[[1]]</code>, <code>[[2]]</code> phải khớp với số mục.</p></div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+        {% endif %}
+
+        <footer class="tepf-form-footer">
+            <div class="tepf-footer-assurance"><i class="bi bi-shield-check"></i><span>Vui lòng rà soát thông tin trước khi xác nhận lưu phiên bản đề.</span></div>
+            <div class="tepf-footer-actions">
+                <a href="{% url 'teacher_exam_papers' exam.id %}" class="tepf-button tepf-button-cancel">Hủy</a>
+                <button type="submit" class="tepf-button tepf-button-save"><i class="bi bi-check2-circle"></i><span>{{ submit_label }}</span></button>
+            </div>
+        </footer>
+    </form>
+</div>
+
+{% if show_question_data %}
+<template id="questionCardTemplate">
+    <article class="tepf-question-card" data-question-card>
+        <header class="tepf-question-card-header">
+            <div class="tepf-question-title-wrap">
+                <span class="tepf-question-symbol"><i class="bi bi-chat-square-text"></i></span>
+                <div><span class="tepf-question-overline">NỘI DUNG ĐÁNH GIÁ</span><h3 data-question-title>Câu hỏi</h3></div>
+            </div>
+            <div class="tepf-question-card-tools">
+                <label class="tepf-type-select-wrap"><span>Dạng câu hỏi</span>
+                    <select class="form-select tepf-type-select" data-field="type">
+                        <option value="MCQ">Trắc nghiệm (MCQ)</option>
+                        <option value="DRAG">Kéo thả (DRAG)</option>
+                        <option value="SORT">Sắp xếp (SORT)</option>
+                        <option value="CODE">Lập trình (CODE)</option>
+                    </select>
+                </label>
+                <button type="button" class="tepf-icon-button tepf-delete-question" data-action="remove-question" aria-label="Xóa câu hỏi" title="Xóa câu hỏi">
+                    <i class="bi bi-trash3"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="tepf-question-body">
+            <div class="row g-3 tepf-question-base-fields">
+                <div class="col-md-9">
+                    <label class="form-label tepf-label">Nội dung câu hỏi <span>*</span></label>
+                    <textarea class="form-control tepf-control" rows="3" data-field="content" placeholder="Mô tả rõ yêu cầu mà sinh viên cần thực hiện..."></textarea>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label tepf-label">Điểm câu hỏi</label>
+                    <input type="number" class="form-control tepf-control" min="0.1" step="0.1" value="1" data-field="score">
+                    <small class="tepf-help">Điểm số của câu hỏi.</small>
+                </div>
+            </div>
+
+            <section class="tepf-question-section" data-section="MCQ" hidden>
+                <div class="tepf-subsection-heading"><span class="tepf-subsection-icon"><i class="bi bi-ui-radios"></i></span><div><h4>Các phương án trả lời</h4><p>Thêm phương án và đánh dấu một đáp án chính xác.</p></div></div>
+                <div data-choice-container class="tepf-choice-container"></div>
+                <button type="button" class="tepf-inline-add" data-action="add-choice"><i class="bi bi-plus-circle"></i> Thêm phương án</button>
+                <div class="tepf-correct-answer">
+                    <label class="form-label tepf-label">Đáp án đúng <span>*</span></label>
+                    <select class="form-select tepf-control" data-field="correct_answer"></select>
+                </div>
+                <p class="tepf-helper-line"><i class="bi bi-info-circle"></i> Cần từ 2 đến 8 phương án. Mỗi câu chỉ chọn một đáp án đúng.</p>
+            </section>
+
+            <section class="tepf-question-section" data-section="DRAG" hidden>
+                <div class="tepf-subsection-heading"><span class="tepf-subsection-icon"><i class="bi bi-arrows-move"></i></span><div><h4>Nội dung kéo thả</h4><p>Đặt các vị trí trống trong nội dung và khai báo thứ tự đúng bên dưới.</p></div></div>
+                <div class="tepf-field">
+                    <label class="form-label tepf-label">Mẫu nội dung có vị trí trống <span>*</span></label>
+                    <textarea class="form-control tepf-control tepf-code-input" rows="4" data-field="code_template" placeholder="Ví dụ: int result = [[1]] + [[2]];"></textarea>
+                    <small class="tepf-help">Sử dụng ký hiệu <code>[[1]]</code>, <code>[[2]]</code>, <code>[[3]]</code>... tại vị trí cần kéo thả.</small>
+                </div>
+                <div class="tepf-field tepf-items-field">
+                    <label class="form-label tepf-label">Các mục kéo thả theo thứ tự đúng</label>
+                    <div data-items-container="DRAG" class="tepf-item-container"></div>
+                    <button type="button" class="tepf-inline-add" data-action="add-item" data-item-type="DRAG"><i class="bi bi-plus-circle"></i> Thêm mục kéo thả</button>
+                    <small class="tepf-help">Thứ tự khai báo tại đây chính là thứ tự đáp án chính xác.</small>
+                </div>
+            </section>
+
+            <section class="tepf-question-section" data-section="SORT" hidden>
+                <div class="tepf-subsection-heading"><span class="tepf-subsection-icon"><i class="bi bi-sort-numeric-down"></i></span><div><h4>Các mục cần sắp xếp</h4><p>Nhập từng dòng hoặc từng bước theo thứ tự chính xác.</p></div></div>
+                <div data-items-container="SORT" class="tepf-item-container"></div>
+                <button type="button" class="tepf-inline-add" data-action="add-item" data-item-type="SORT"><i class="bi bi-plus-circle"></i> Thêm dòng lệnh</button>
+                <p class="tepf-helper-line"><i class="bi bi-info-circle"></i> Cần ít nhất hai mục. Thứ tự hiện tại sẽ được lưu làm đáp án chuẩn.</p>
+            </section>
+
+            <section class="tepf-question-section" data-section="CODE" hidden>
+                <div class="tepf-subsection-heading"><span class="tepf-subsection-icon"><i class="bi bi-code-slash"></i></span><div><h4>Cấu hình câu hỏi lập trình</h4><p>Thiết lập môi trường, mã nguồn gợi ý và các trường hợp kiểm thử.</p></div></div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label tepf-label">Ngôn ngữ lập trình</label>
+                        <select class="form-select tepf-control" data-field="language"><option value="cpp">C++</option></select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label tepf-label">Tên hàm <span class="tepf-optional">Nếu cần</span></label>
+                        <input type="text" class="form-control tepf-control" data-field="function_name" placeholder="Ví dụ: calculateSum">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label tepf-label">Code mẫu ban đầu</label>
+                        <textarea class="form-control tepf-control tepf-code-input" rows="7" data-field="starter_code" placeholder="Nhập đoạn code khởi tạo cho sinh viên..."></textarea>
+                        <small class="tepf-help">Đoạn mã này được cung cấp làm điểm bắt đầu khi sinh viên làm bài.</small>
+                    </div>
+                </div>
+                <div class="tepf-testcase-heading">
+                    <div><h4>Bộ kiểm thử (Test Cases)</h4><p>Mỗi Test Case có dữ liệu vào, kết quả mong đợi và điểm tương ứng.</p></div>
+                    <button type="button" class="tepf-inline-add" data-action="add-testcase"><i class="bi bi-plus-circle"></i> Thêm Test Case</button>
+                </div>
+                <div data-testcase-container class="tepf-testcase-container"></div>
+                <div class="tepf-code-score-note"><i class="bi bi-calculator"></i><span>Tổng điểm câu hỏi được tự động cộng từ điểm của tất cả Test Case.</span></div>
+            </section>
+        </div>
+    </article>
+</template>
+
+<template id="choiceRowTemplate">
+    <div class="tepf-choice-row" data-choice-row>
+        <span class="tepf-choice-letter" data-choice-label>A</span>
+        <input type="text" class="form-control tepf-control" data-choice-text placeholder="Nhập nội dung phương án...">
+        <button type="button" class="tepf-row-delete" data-action="remove-choice" aria-label="Xóa phương án" title="Xóa phương án"><i class="bi bi-x-lg"></i></button>
+    </div>
+</template>
+
+<template id="itemRowTemplate">
+    <div class="tepf-item-row" data-item-row>
+        <span class="tepf-item-number" data-item-number>Mục 1</span>
+        <textarea class="form-control tepf-control tepf-code-input" rows="2" data-item-text placeholder="Nhập nội dung mục..."></textarea>
+        <button type="button" class="tepf-row-delete" data-action="remove-item" aria-label="Xóa mục" title="Xóa mục"><i class="bi bi-x-lg"></i></button>
+    </div>
+</template>
+
+<template id="testcaseRowTemplate">
+    <div class="tepf-testcase-card" data-testcase-row>
+        <div class="tepf-testcase-card-heading">
+            <div><span class="tepf-testcase-dot"></span><strong data-testcase-title>Test Case 1</strong></div>
+            <button type="button" class="tepf-text-delete" data-action="remove-testcase"><i class="bi bi-trash3"></i> Xóa Test Case</button>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label tepf-label">Input</label>
+                <textarea class="form-control tepf-control tepf-code-input" rows="3" data-testcase-input placeholder="Dữ liệu đầu vào..."></textarea>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label tepf-label">Expected Output</label>
+                <textarea class="form-control tepf-control tepf-code-input" rows="3" data-testcase-output placeholder="Kết quả mong đợi..."></textarea>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label tepf-label">Điểm</label>
+                <input type="number" class="form-control tepf-control" min="0" step="0.1" value="1" data-testcase-score>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script>
+(function () {
+    "use strict";
+
+    const form = document.getElementById("paperForm");
+    const container = document.getElementById("questionsContainer");
+    const dataInput = document.getElementById("questionDataInput");
+    const errorBox = document.getElementById("builderError");
+
+    if (!form || !container || !dataInput) return;
+
+    const letters = "ABCDEFGH";
+
+    function cloneTemplate(templateId) {
+        const template = document.getElementById(templateId);
+        if (!template) throw new Error("Không tìm thấy mẫu giao diện: " + templateId);
+        return template.content.cloneNode(true);
+    }
+
+    function showError(message) {
+        errorBox.querySelector("span").textContent = message;
+        errorBox.classList.remove("d-none");
+        errorBox.scrollIntoView({behavior: "smooth", block: "center"});
+    }
+
+    function clearError() {
+        errorBox.querySelector("span").textContent = "";
+        errorBox.classList.add("d-none");
+    }
+
+    function getQuestionCards() {
+        return Array.from(container.querySelectorAll("[data-question-card]"));
+    }
+
+    function updateQuestionNumbers() {
+        getQuestionCards().forEach(function (card, index) {
+            card.querySelector("[data-question-title]").textContent = "Câu hỏi " + (index + 1);
+        });
+        updateSummary();
+    }
+
+    function updateSummary() {
+        const cards = getQuestionCards();
+        const total = cards.reduce(function (sum, card) {
+            const type = card.querySelector('[data-field="type"]').value;
+            const scoreInput = card.querySelector('[data-field="score"]');
+
+            if (type === "CODE") {
+                const testTotal = Array.from(card.querySelectorAll("[data-testcase-score]"))
+                    .reduce(function (subTotal, input) {
+                        const value = Number(input.value);
+                        return subTotal + (Number.isFinite(value) ? value : 0);
+                    }, 0);
+                scoreInput.value = Number(testTotal.toFixed(2)).toString();
+                return sum + testTotal;
+            }
+
+            const score = Number(scoreInput.value);
+            return sum + (Number.isFinite(score) ? score : 0);
+        }, 0);
+
+        document.getElementById("questionCount").textContent = cards.length;
+        document.getElementById("totalScore").textContent = Number(total.toFixed(2)).toString();
+    }
+
+    function addChoice(card, choiceData) {
+        const fragment = cloneTemplate("choiceRowTemplate");
+        const row = fragment.querySelector("[data-choice-row]");
+        row.querySelector("[data-choice-text]").value = choiceData && choiceData.text ? choiceData.text : "";
+        card.querySelector("[data-choice-container]").appendChild(row);
+        updateChoices(card);
+    }
+
+    function updateChoices(card, preferredAnswer) {
+        const rows = Array.from(card.querySelectorAll("[data-choice-row]"));
+        const select = card.querySelector('[data-field="correct_answer"]');
+        const oldValue = preferredAnswer || select.value;
+
+        rows.forEach(function (row, index) {
+            row.querySelector("[data-choice-label]").textContent = letters[index];
+        });
+
+        select.replaceChildren();
+        rows.forEach(function (row, index) {
+            const option = document.createElement("option");
+            option.value = letters[index];
+            option.textContent = letters[index];
+            select.appendChild(option);
+        });
+
+        if (rows.some(function (row, index) { return letters[index] === oldValue; })) {
+            select.value = oldValue;
+        } else if (rows.length > 0) {
+            select.value = letters[0];
+        }
+    }
+
+    function addItem(card, type, itemData) {
+        const fragment = cloneTemplate("itemRowTemplate");
+        const row = fragment.querySelector("[data-item-row]");
+        row.querySelector("[data-item-text]").value =
+            itemData && (itemData.text || itemData.code) ? (itemData.text || itemData.code) : "";
+        card.querySelector('[data-items-container="' + type + '"]').appendChild(row);
+        updateItemNumbers(card, type);
+    }
+
+    function updateItemNumbers(card, type) {
+        const rows = card.querySelectorAll('[data-items-container="' + type + '"] [data-item-row]');
+        rows.forEach(function (row, index) {
+            row.querySelector("[data-item-number]").textContent = "Mục " + (index + 1);
+        });
+    }
+
+    function addTestCase(card, testcaseData) {
+        const fragment = cloneTemplate("testcaseRowTemplate");
+        const row = fragment.querySelector("[data-testcase-row]");
+        const inputValue = testcaseData ? (testcaseData.input_data ?? testcaseData.input ?? "") : "";
+        const outputValue = testcaseData ? (testcaseData.expected_output ?? testcaseData.output ?? "") : "";
+        const scoreValue = testcaseData && testcaseData.score !== undefined ? testcaseData.score : 1;
+
+        row.querySelector("[data-testcase-input]").value = inputValue;
+        row.querySelector("[data-testcase-output]").value = outputValue;
+        row.querySelector("[data-testcase-score]").value = scoreValue;
+        card.querySelector("[data-testcase-container]").appendChild(row);
+        updateTestCaseNumbers(card);
+    }
+
+    function updateTestCaseNumbers(card) {
+        card.querySelectorAll("[data-testcase-row]").forEach(function (row, index) {
+            row.querySelector("[data-testcase-title]").textContent = "Test Case " + (index + 1);
+        });
+    }
+
+    function renderQuestionType(card) {
+        const type = card.querySelector('[data-field="type"]').value;
+        card.querySelectorAll("[data-section]").forEach(function (section) {
+            section.hidden = section.dataset.section !== type;
+        });
+
+        if (type === "MCQ" && card.querySelectorAll("[data-choice-row]").length === 0) {
+            ["", "", "", ""].forEach(function () { addChoice(card, null); });
+        }
+        if (type === "DRAG" && card.querySelectorAll('[data-items-container="DRAG"] [data-item-row]').length === 0) {
+            addItem(card, "DRAG", null);
+        }
+        if (type === "SORT" && card.querySelectorAll('[data-items-container="SORT"] [data-item-row]').length === 0) {
+            addItem(card, "SORT", null);
+            addItem(card, "SORT", null);
+        }
+        if (type === "CODE" && card.querySelectorAll("[data-testcase-row]").length === 0) {
+            addTestCase(card, null);
+        }
+
+        const scoreInput = card.querySelector('[data-field="score"]');
+        scoreInput.readOnly = type === "CODE";
+        const scoreLabel = scoreInput.closest(".col-md-3").querySelector(".form-label");
+        scoreLabel.textContent = type === "CODE" ? "Tổng điểm Test Case (tự tính)" : "Điểm câu hỏi";
+        updateSummary();
+    }
+
+    function createQuestion(questionData) {
+        const fragment = cloneTemplate("questionCardTemplate");
+        const card = fragment.querySelector("[data-question-card]");
+        const data = questionData || {};
+        const type = String(data.type || "MCQ").toUpperCase();
+
+        if (!["MCQ", "DRAG", "SORT", "CODE"].includes(type)) {
+            throw new Error("Loại câu hỏi không được hỗ trợ: " + type);
+        }
+
+        card.querySelector('[data-field="type"]').value = type;
+        card.querySelector('[data-field="content"]').value = data.content || data.title || "";
+        card.querySelector('[data-field="score"]').value = data.score !== undefined ? data.score : 1;
+
+        if (type === "MCQ") {
+            let choices = Array.isArray(data.choices) ? data.choices : [];
+            if (choices.length === 0 && Array.isArray(data.options)) {
+                choices = data.options.map(function (option) {
+                    return typeof option === "string" ? {text: option} : option;
+                });
+            }
+            choices.forEach(function (choice) {
+                addChoice(card, {text: choice.text || choice.content || ""});
+            });
+            if (choices.length === 0) {
+                ["", "", "", ""].forEach(function () { addChoice(card, null); });
+            }
+
+            let correctAnswer = data.correct_answer || "";
+            if (!correctAnswer && choices.length > 0) {
+                const correctIndex = choices.findIndex(function (choice) {
+                    return choice.is_correct || choice.correct;
+                });
+                if (correctIndex >= 0) correctAnswer = letters[correctIndex];
+            }
+            updateChoices(card, correctAnswer || "A");
+        }
+
+        if (type === "DRAG") {
+            card.querySelector('[data-field="code_template"]').value = data.code_template || "";
+            const items = Array.isArray(data.items) ? [...data.items].sort(function (a, b) {
+                return Number(a.correct_order || 0) - Number(b.correct_order || 0);
+            }) : [];
+            items.forEach(function (item) { addItem(card, "DRAG", item); });
+            if (items.length === 0) addItem(card, "DRAG", null);
+        }
+
+        if (type === "SORT") {
+            const items = Array.isArray(data.items) ? [...data.items].sort(function (a, b) {
+                return Number(a.correct_order || 0) - Number(b.correct_order || 0);
+            }) : [];
+            items.forEach(function (item) { addItem(card, "SORT", item); });
+            if (items.length === 0) {
+                addItem(card, "SORT", null);
+                addItem(card, "SORT", null);
+            }
+        }
+
+        if (type === "CODE") {
+            const languageSelect = card.querySelector('[data-field="language"]');
+            const savedLanguage = data.language || "cpp";
+            if (!Array.from(languageSelect.options).some(function (option) {
+                return option.value === savedLanguage;
+            })) {
+                const option = document.createElement("option");
+                option.value = savedLanguage;
+                option.textContent = savedLanguage.toUpperCase();
+                languageSelect.appendChild(option);
+            }
+            languageSelect.value = savedLanguage;
+            card.querySelector('[data-field="function_name"]').value = data.function_name || "";
+            card.querySelector('[data-field="starter_code"]').value = data.starter_code || data.starterCode || "";
+
+            const testCases = Array.isArray(data.test_cases) ? data.test_cases : [];
+            testCases.forEach(function (testcase) { addTestCase(card, testcase); });
+            if (testCases.length === 0) addTestCase(card, null);
+        }
+
+        container.appendChild(card);
+        renderQuestionType(card);
+        return card;
+    }
+
+    document.getElementById("addQuestionButton").addEventListener("click", function () {
+        createQuestion({type: "MCQ", content: "", score: 1});
+        updateQuestionNumbers();
+        const cards = getQuestionCards();
+        cards[cards.length - 1].scrollIntoView({behavior: "smooth", block: "center"});
+    });
+
+    container.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-action]");
+        if (!button) return;
+
+        const card = button.closest("[data-question-card]");
+        const action = button.dataset.action;
+
+        if (action === "remove-question") {
+            card.remove();
+            updateQuestionNumbers();
+            clearError();
+            return;
+        }
+        if (action === "add-choice") {
+            const count = card.querySelectorAll("[data-choice-row]").length;
+            if (count >= 8) {
+                showError("Một câu trắc nghiệm tối đa 8 phương án.");
+                return;
+            }
+            addChoice(card, null);
+            return;
+        }
+        if (action === "remove-choice") {
+            button.closest("[data-choice-row]").remove();
+            updateChoices(card);
+            return;
+        }
+        if (action === "add-item") {
+            addItem(card, button.dataset.itemType, null);
+            return;
+        }
+        if (action === "remove-item") {
+            const row = button.closest("[data-item-row]");
+            const type = card.querySelector('[data-field="type"]').value;
+            row.remove();
+            updateItemNumbers(card, type);
+            return;
+        }
+        if (action === "add-testcase") {
+            addTestCase(card, null);
+            updateSummary();
+            return;
+        }
+        if (action === "remove-testcase") {
+            button.closest("[data-testcase-row]").remove();
+            updateTestCaseNumbers(card);
+            updateSummary();
+            return;
+        }
+    });
+
+    container.addEventListener("change", function (event) {
+        if (event.target.matches('[data-field="type"]')) {
+            renderQuestionType(event.target.closest("[data-question-card]"));
+        }
+        if (event.target.matches('[data-field="score"]')) updateSummary();
+    });
+
+    container.addEventListener("input", function (event) {
+        if (event.target.matches('[data-field="score"]') ||
+            event.target.matches("[data-testcase-score]")) {
+            updateSummary();
+        }
+    });
+
+    function collectQuestionData() {
+        const questions = [];
+        const cards = getQuestionCards();
+
+        if (cards.length === 0) throw new Error("Đề thi phải có ít nhất một câu hỏi.");
+
+        cards.forEach(function (card, index) {
+            const number = index + 1;
+            const type = card.querySelector('[data-field="type"]').value;
+            const content = card.querySelector('[data-field="content"]').value.trim();
+            const score = Number(card.querySelector('[data-field="score"]').value);
+
+            if (!content) throw new Error("Câu " + number + ": vui lòng nhập nội dung câu hỏi.");
+            if (!Number.isFinite(score) || score <= 0) {
+                throw new Error("Câu " + number + ": điểm phải lớn hơn 0.");
+            }
+
+            const question = {type: type, content: content, score: score};
+
+            if (type === "MCQ") {
+                const rows = Array.from(card.querySelectorAll("[data-choice-row]"));
+                if (rows.length < 2 || rows.length > 8) {
+                    throw new Error("Câu " + number + ": MCQ cần từ 2 đến 8 phương án.");
+                }
+
+                const choices = rows.map(function (row, choiceIndex) {
+                    const text = row.querySelector("[data-choice-text]").value.trim();
+                    if (!text) throw new Error("Câu " + number + ": vui lòng nhập đầy đủ các phương án.");
+                    return {label: letters[choiceIndex], text: text};
+                });
+
+                const correctAnswer = card.querySelector('[data-field="correct_answer"]').value;
+                if (!choices.some(function (choice) { return choice.label === correctAnswer; })) {
+                    throw new Error("Câu " + number + ": vui lòng chọn đáp án đúng.");
+                }
+                question.choices = choices;
+                question.correct_answer = correctAnswer;
+            } else if (type === "DRAG") {
+                const codeTemplate = card.querySelector('[data-field="code_template"]').value;
+                const rows = Array.from(card.querySelectorAll('[data-items-container="DRAG"] [data-item-row]'));
+
+                if (!codeTemplate.trim()) throw new Error("Câu " + number + ": vui lòng nhập mẫu nội dung kéo thả.");
+                if (rows.length === 0) throw new Error("Câu " + number + ": cần ít nhất một mục kéo thả.");
+
+                const items = rows.map(function (row, itemIndex) {
+                    const text = row.querySelector("[data-item-text]").value.trim();
+                    if (!text) throw new Error("Câu " + number + ": vui lòng nhập đầy đủ các mục kéo thả.");
+                    return {text: text, correct_order: itemIndex + 1};
+                });
+
+                for (let itemIndex = 1; itemIndex <= items.length; itemIndex++) {
+                    if (!codeTemplate.includes("[[" + itemIndex + "]]")) {
+                        throw new Error("Câu " + number + ": mẫu kéo thả cần có vị trí [[" + itemIndex + "]].");
+                    }
+                }
+                question.code_template = codeTemplate;
+                question.items = items;
+            } else if (type === "SORT") {
+                const rows = Array.from(card.querySelectorAll('[data-items-container="SORT"] [data-item-row]'));
+                if (rows.length < 2) throw new Error("Câu " + number + ": SORT cần ít nhất hai dòng lệnh.");
+
+                question.items = rows.map(function (row, itemIndex) {
+                    const text = row.querySelector("[data-item-text]").value.trim();
+                    if (!text) throw new Error("Câu " + number + ": vui lòng nhập đầy đủ các dòng lệnh.");
+                    return {text: text, correct_order: itemIndex + 1};
+                });
+            } else if (type === "CODE") {
+                const testCaseRows = Array.from(card.querySelectorAll("[data-testcase-row]"));
+                if (testCaseRows.length === 0) throw new Error("Câu " + number + ": cần ít nhất một Test Case.");
+
+                question.language = card.querySelector('[data-field="language"]').value || "cpp";
+                question.starter_code = card.querySelector('[data-field="starter_code"]').value;
+
+                const functionName = card.querySelector('[data-field="function_name"]').value.trim();
+                if (functionName) question.function_name = functionName;
+
+                question.test_cases = testCaseRows.map(function (row, testIndex) {
+                    const input = row.querySelector("[data-testcase-input]").value;
+                    const output = row.querySelector("[data-testcase-output]").value;
+                    const testScore = Number(row.querySelector("[data-testcase-score]").value);
+
+                    if (!Number.isFinite(testScore) || testScore < 0) {
+                        throw new Error("Câu " + number + ", Test Case " + (testIndex + 1) + ": điểm kiểm thử không hợp lệ.");
+                    }
+                    return {input_data: input, expected_output: output, score: testScore};
+                });
+
+                question.score = question.test_cases.reduce(function (total, testcase) {
+                    return total + testcase.score;
+                }, 0);
+            }
+
+            questions.push(question);
+        });
+
+        return questions;
+    }
+
+    form.addEventListener("submit", function (event) {
+        if (!container.children.length && !document.getElementById("questionCardTemplate")) return;
+
+        event.preventDefault();
+        clearError();
+
+        try {
+            const questions = collectQuestionData();
+            dataInput.value = JSON.stringify(questions, null, 2);
+            form.submit();
+        } catch (error) {
+            showError(error.message || "Dữ liệu câu hỏi không hợp lệ.");
+        }
+    });
+
+    try {
+        const initialQuestions = JSON.parse(dataInput.value || "[]");
+        if (!Array.isArray(initialQuestions)) throw new Error("Dữ liệu câu hỏi gốc không phải danh sách.");
+
+        initialQuestions.forEach(function (question) { createQuestion(question); });
+
+        if (initialQuestions.length === 0) {
+            createQuestion({type: "MCQ", content: "", score: 1});
+        }
+    } catch (error) {
+        showError("Không thể đọc dữ liệu câu hỏi gốc: " + error.message);
+    }
+
+    updateQuestionNumbers();
+})();
+</script>
+{% endif %}
+{% endblock %}

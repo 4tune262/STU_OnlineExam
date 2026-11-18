@@ -861,6 +861,13 @@ class ExamAdmin(admin.ModelAdmin):
                     "number_of_papers",
                     "1"
                 )
+                exam_type = request.POST.get(
+                    "exam_type",
+                    Exam.EXAM_TYPE_AT_HOME,
+                ).strip()
+
+                if exam_type not in dict(Exam.EXAM_TYPE_CHOICES):
+                    raise ValueError("Hình thức thi không hợp lệ.")
 
                 question_data_raw = request.POST.get(
                     "question_data",
@@ -1173,6 +1180,8 @@ class ExamAdmin(admin.ModelAdmin):
                     exam.course = course
 
                     exam.offering = offering
+
+                    exam.exam_type = exam_type
 
                     exam.duration_minutes = (
                         duration_minutes

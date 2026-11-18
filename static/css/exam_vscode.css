@@ -3103,3 +3103,165 @@
         transform: scale(1);
     }
 }
+
+/* =========================================================
+   STU EXAM EDITOR - VS CODE DARK+ SYNTAX HIGHLIGHTING
+   Visual-only layer. Original textarea remains authoritative.
+   ========================================================= */
+.vscode-editor-body {
+    position: relative;
+    isolation: isolate;
+    background: #1e1e1e !important;
+}
+
+.vscode-highlight-layer {
+    position: absolute;
+    z-index: 1;
+    inset: 0 0 0 54px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 14px 18px;
+    overflow: hidden;
+    border: 0;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    pointer-events: none;
+    white-space: pre;
+    tab-size: 4;
+    font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace;
+    font-size: 13px;
+    line-height: 21px;
+}
+
+.vscode-highlight-layer code.hljs {
+    display: block;
+    padding: 0;
+    overflow: visible;
+    background: transparent !important;
+    color: #d4d4d4;
+    font: inherit;
+    line-height: inherit;
+    white-space: pre;
+}
+
+/* VS Code Dark+ inspired token palette */
+.vscode-highlight-layer .hljs-keyword,
+.vscode-highlight-layer .hljs-selector-tag,
+.vscode-highlight-layer .hljs-literal { color: #569cd6; }
+.vscode-highlight-layer .hljs-type,
+.vscode-highlight-layer .hljs-built_in { color: #4ec9b0; }
+.vscode-highlight-layer .hljs-title,
+.vscode-highlight-layer .hljs-title.function_,
+.vscode-highlight-layer .hljs-function .hljs-title { color: #dcdcaa; }
+.vscode-highlight-layer .hljs-variable,
+.vscode-highlight-layer .hljs-params,
+.vscode-highlight-layer .hljs-property { color: #9cdcfe; }
+.vscode-highlight-layer .hljs-string,
+.vscode-highlight-layer .hljs-char { color: #ce9178; }
+.vscode-highlight-layer .hljs-number { color: #b5cea8; }
+.vscode-highlight-layer .hljs-comment,
+.vscode-highlight-layer .hljs-quote { color: #6a9955; font-style: italic; }
+.vscode-highlight-layer .hljs-meta { color: #c586c0; }
+.vscode-highlight-layer .hljs-operator,
+.vscode-highlight-layer .hljs-punctuation { color: #d4d4d4; }
+
+.vscode-code-input {
+    position: relative;
+    z-index: 2;
+    background: transparent !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    caret-color: #ffffff !important;
+    font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace !important;
+    font-size: 13px !important;
+    line-height: 21px !important;
+    padding: 14px 18px !important;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.vscode-code-input::selection {
+    background: rgba(38, 79, 120, .72) !important;
+    -webkit-text-fill-color: transparent;
+}
+
+.vscode-line-numbers {
+    position: relative;
+    z-index: 3;
+    background: #1e1e1e !important;
+    color: #858585 !important;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+    font-size: 13px !important;
+    line-height: 21px !important;
+}
+
+/* Keep drag tokens compact, including after being dropped into a slot. */
+.drag-slot {
+    display: inline-flex !important;
+    vertical-align: baseline !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 0 !important;
+    min-height: 23px !important;
+    margin: 0 2px !important;
+    padding: 1px 5px !important;
+    gap: 3px !important;
+    border-radius: 4px !important;
+    line-height: 1.45 !important;
+}
+
+.drag-slot-number,
+.drag-slot-placeholder {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+}
+
+.drag-slot .drag-token,
+.drag-token.drag-token-in-slot {
+    display: inline-flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 1px 5px !important;
+    gap: 3px !important;
+    border: 1px solid #3e7899 !important;
+    border-radius: 4px !important;
+    background: #263b50 !important;
+    color: #9cdcfe !important;
+    box-shadow: none !important;
+    transform: none !important;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    white-space: nowrap;
+}
+
+.drag-slot .drag-token code,
+.drag-token.drag-token-in-slot code {
+    color: inherit !important;
+    font: inherit !important;
+}
+
+.drag-source-pool {
+    gap: 7px !important;
+    padding: 10px !important;
+}
+
+.drag-source-pool .drag-token {
+    min-height: 27px !important;
+    padding: 3px 8px !important;
+    border-radius: 5px !important;
+    font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+}
+
+.drag-source-pool .drag-token:hover {
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .vscode-highlight-layer { inset-left: 48px; }
+    .vscode-line-numbers { flex-basis: 48px; }
+}

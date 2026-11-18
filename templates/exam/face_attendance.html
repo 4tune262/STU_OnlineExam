@@ -1,0 +1,480 @@
+
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .fa-page {
+        --fa-primary: #0b426b;
+        --fa-primary-dark: #083452;
+        --fa-accent: #0876b9;
+        --fa-border: #e2e8f0;
+        --fa-muted: #64748b;
+        color: #243447;
+        padding-bottom: 32px;
+    }
+
+    .fa-page .fa-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 28px 30px;
+        border-radius: 16px;
+        color: #fff;
+        background: linear-gradient(120deg, #083452 0%, #0b527e 65%, #0876b9 100%);
+        box-shadow: 0 8px 24px rgba(8, 52, 82, .12);
+    }
+
+    .fa-page .fa-hero::after {
+        content: "";
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        right: -55px;
+        top: -95px;
+        border: 30px solid rgba(255, 255, 255, .07);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+
+    .fa-page .fa-hero-icon {
+        display: inline-flex;
+        width: 54px;
+        height: 54px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, .22);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .12);
+        font-size: 25px;
+        flex-shrink: 0;
+    }
+
+    .fa-page .fa-eyebrow {
+        margin-bottom: 7px;
+        color: #c9e7fb;
+        font-size: .76rem;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+    }
+
+    .fa-page .fa-hero h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.45rem, 2.5vw, 1.9rem);
+        font-weight: 700;
+    }
+
+    .fa-page .fa-hero p {
+        max-width: 650px;
+        margin: 0;
+        color: #e0eff9;
+        line-height: 1.7;
+    }
+
+    .fa-page .fa-stat-card,
+    .fa-page .fa-panel {
+        border: 1px solid var(--fa-border);
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, .035);
+    }
+
+    .fa-page .fa-stat-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-height: 100px;
+        padding: 20px;
+    }
+
+    .fa-page .fa-stat-icon {
+        display: flex;
+        width: 46px;
+        height: 46px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: #e8f3fb;
+        color: var(--fa-primary);
+        font-size: 21px;
+    }
+
+    .fa-page .fa-stat-label {
+        margin-bottom: 4px;
+        color: var(--fa-muted);
+        font-size: .84rem;
+    }
+
+    .fa-page .fa-stat-value {
+        color: var(--fa-primary-dark);
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .fa-page .fa-section-title {
+        color: #173b57;
+        font-size: 1.08rem;
+        font-weight: 700;
+    }
+
+    .fa-page .fa-section-subtitle {
+        color: var(--fa-muted);
+        font-size: .875rem;
+    }
+
+    .fa-page .fa-table {
+        margin-bottom: 0;
+        vertical-align: middle;
+    }
+
+    .fa-page .fa-table thead th {
+        padding: 15px 16px;
+        border-bottom: 1px solid #dce5ed;
+        background: #f4f8fb;
+        color: #52677a;
+        font-size: .75rem;
+        font-weight: 700;
+        letter-spacing: .035em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .fa-page .fa-table tbody td {
+        padding: 17px 16px;
+        border-color: #edf1f5;
+    }
+
+    .fa-page .fa-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .fa-page .fa-table tbody tr:hover {
+        background: #f8fbfe;
+    }
+
+    .fa-page .fa-exam-icon {
+        display: flex;
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 11px;
+        background: #eaf3fb;
+        color: var(--fa-primary);
+        font-size: 18px;
+    }
+
+    .fa-page .fa-exam-name {
+        color: #193b55;
+        font-weight: 650;
+        line-height: 1.5;
+    }
+
+    .fa-page .fa-meta {
+        color: #718096;
+        font-size: .8rem;
+    }
+
+    .fa-page .fa-course-pill {
+        display: inline-block;
+        padding: 5px 9px;
+        border: 1px solid #d8e9f7;
+        border-radius: 7px;
+        background: #f0f7fd;
+        color: #165783;
+        font-size: .82rem;
+        font-weight: 600;
+    }
+
+    .fa-page .fa-classroom-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 9px;
+        border-radius: 20px;
+        background: #e8f7ef;
+        color: #197447;
+        font-size: .78rem;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    .fa-page .fa-btn-primary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 39px;
+        padding: 8px 14px;
+        border: 1px solid var(--fa-primary);
+        border-radius: 8px;
+        background: var(--fa-primary);
+        color: #fff;
+        font-size: .875rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background .18s ease, transform .18s ease;
+        white-space: nowrap;
+    }
+
+    .fa-page .fa-btn-primary:hover {
+        transform: translateY(-1px);
+        border-color: var(--fa-primary-dark);
+        background: var(--fa-primary-dark);
+        color: #fff;
+    }
+
+    .fa-page .fa-empty {
+        padding: 48px 20px;
+        text-align: center;
+    }
+
+    .fa-page .fa-empty-icon {
+        display: inline-flex;
+        width: 64px;
+        height: 64px;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        border-radius: 18px;
+        background: #eef5fa;
+        color: #527d9d;
+        font-size: 27px;
+    }
+
+    .fa-page .fa-empty h3 {
+        color: #24445d;
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .fa-page .fa-empty p {
+        max-width: 440px;
+        margin: 0 auto;
+        color: var(--fa-muted);
+        font-size: .9rem;
+        line-height: 1.7;
+    }
+
+    .fa-page .fa-guide {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 17px 19px;
+        border: 1px solid #d9eaf7;
+        border-radius: 12px;
+        background: #f3f9fe;
+    }
+
+    .fa-page .fa-guide > i {
+        margin-top: 2px;
+        color: #1671aa;
+        font-size: 20px;
+    }
+
+    .fa-page .fa-guide strong {
+        display: block;
+        margin-bottom: 3px;
+        color: #194b70;
+        font-size: .9rem;
+    }
+
+    .fa-page .fa-guide p {
+        margin: 0;
+        color: #536e83;
+        font-size: .84rem;
+        line-height: 1.65;
+    }
+
+    @media (max-width: 767.98px) {
+        .fa-page .fa-hero {
+            padding: 22px 20px;
+            border-radius: 12px;
+        }
+
+        .fa-page .fa-stat-card {
+            min-height: 84px;
+            padding: 14px;
+        }
+
+        .fa-page .fa-stat-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .fa-page .fa-table thead th,
+        .fa-page .fa-table tbody td {
+            padding: 12px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block body_block %}
+<div class="container-fluid px-3 px-lg-4 py-4 fa-page">
+
+    <!-- Tiêu đề trang -->
+    <section class="fa-hero mb-4">
+        <div class="d-flex align-items-center gap-3 position-relative" style="z-index: 1;">
+            <div class="fa-hero-icon">
+                <i class="bi bi-person-check-fill"></i>
+            </div>
+            <div>
+                <div class="fa-eyebrow">Không gian giảng viên</div>
+                <h1>Điểm danh khuôn mặt</h1>
+                <p>Quản lý điểm danh sinh viên cho các bài thi trực tiếp tại lớp bằng công nghệ nhận diện khuôn mặt.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Thống kê -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-4">
+            <div class="fa-stat-card">
+                <div class="fa-stat-icon">
+                    <i class="bi bi-journal-check"></i>
+                </div>
+                <div>
+                    <div class="fa-stat-label">Bài thi đủ điều kiện</div>
+                    <div class="fa-stat-value">{{ exams|length }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-4">
+            <div class="fa-stat-card">
+                <div class="fa-stat-icon">
+                    <i class="bi bi-camera-video"></i>
+                </div>
+                <div>
+                    <div class="fa-stat-label">Phương thức</div>
+                    <div class="fw-bold text-dark">Nhận diện khuôn mặt</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-4">
+            <div class="fa-stat-card">
+                <div class="fa-stat-icon">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <div>
+                    <div class="fa-stat-label">Phạm vi</div>
+                    <div class="fw-bold text-dark">Thi trực tiếp tại lớp</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Danh sách bài thi -->
+    <section class="fa-panel mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 p-lg-4 border-bottom">
+            <div>
+                <h2 class="fa-section-title mb-1">Danh sách bài thi</h2>
+                <div class="fa-section-subtitle">
+                    Chọn bài thi để mở camera và xác minh sinh viên.
+                </div>
+            </div>
+
+            <span class="badge rounded-pill text-bg-light border px-3 py-2">
+                <i class="bi bi-list-check me-1"></i>
+                {{ exams|length }} bài thi
+            </span>
+        </div>
+
+        {% if exams %}
+            <div class="table-responsive">
+                <table class="table fa-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width: 220px;">Bài thi</th>
+                            <th style="min-width: 150px;">Môn học</th>
+                            <th style="min-width: 130px;">Lớp học phần</th>
+                            <th style="min-width: 165px;">Thời gian bắt đầu</th>
+                            <th style="min-width: 145px;" class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for exam in exams %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="fa-exam-icon">
+                                            <i class="bi bi-file-earmark-text"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fa-exam-name">{{ exam.title }}</div>
+                                            <div class="fa-meta">Mã bài thi: #{{ exam.id }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <span class="fa-course-pill">
+                                        {{ exam.course.name|default:"Chưa cập nhật" }}
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="fw-semibold text-dark">
+                                        {{ exam.offering.group_code|default:"—" }}
+                                    </div>
+                                    <span class="fa-meta">Lớp học phần</span>
+                                </td>
+
+                                <td>
+                                    <div class="fw-semibold text-dark">
+                                        {{ exam.start_time|date:"d/m/Y" }}
+                                    </div>
+                                    <div class="fa-meta">
+                                        <i class="bi bi-clock me-1"></i>
+                                        {{ exam.start_time|date:"H:i" }}
+                                    </div>
+                                </td>
+
+                                <td class="text-end">
+                                    <a
+                                        href="{% url 'face_attendance_exam' exam.id %}"
+                                        class="fa-btn-primary"
+                                    >
+                                        <i class="bi bi-camera-video"></i>
+                                        Điểm danh
+                                        <i class="bi bi-arrow-right"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="fa-empty">
+                <div class="fa-empty-icon">
+                    <i class="bi bi-calendar2-x"></i>
+                </div>
+                <h3>Chưa có bài thi phù hợp</h3>
+                <p>
+                    Hiện chưa có bài thi tại lớp đang hoạt động trong phạm vi được phân công.
+                    Khi bài thi được thiết lập phù hợp, danh sách sẽ xuất hiện tại đây.
+                </p>
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Hướng dẫn -->
+    <div class="fa-guide">
+        <i class="bi bi-info-circle-fill"></i>
+        <div>
+            <strong>Lưu ý khi điểm danh</strong>
+            <p>
+                Kiểm tra đúng lớp học phần trước khi bắt đầu. Sinh viên cần có hồ sơ khuôn mặt hợp lệ
+                và thuộc lớp học phần tương ứng. Hãy thông báo rõ mục đích xử lý ảnh và xác nhận sự đồng ý
+                theo quy trình của nhà trường trước khi quét.
+            </p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

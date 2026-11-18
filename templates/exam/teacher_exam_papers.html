@@ -1,0 +1,283 @@
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_block %}
+
+<link rel="stylesheet" href="{% static 'css/exam.css' %}">
+
+<div class="exam-page exam-paper-management">
+
+    <!-- HEADER -->
+    <div class="exam-page-header">
+        <div class="exam-page-heading">
+            <div class="exam-page-eyebrow">
+                STU ONLINE EXAMINATION
+            </div>
+
+            <h2 class="exam-page-title">
+                <i class="bi bi-files"></i>
+                Quản lý phiên bản đề
+            </h2>
+
+            <p class="exam-page-description">
+                Quản lý các phiên bản đề thi, theo dõi lượt phân công
+                và bảo toàn lịch sử làm bài của sinh viên.
+            </p>
+
+            <div class="exam-paper-subtitle">
+                <i class="bi bi-journal-text"></i>
+                Bài thi: <strong>{{ exam.title }}</strong>
+            </div>
+        </div>
+
+        <div class="exam-paper-header-actions">
+            <a href="{% url 'teacher_exam_assignments' exam.id %}"
+               class="exam-action-button exam-action-secondary">
+                <i class="bi bi-person-check"></i>
+                Phân công đề
+            </a>
+
+            <a href="{% url 'teacher_create_exam_paper' exam.id %}"
+               class="exam-action-button exam-action-primary">
+                <i class="bi bi-plus-circle"></i>
+                Tạo phiên bản đề
+            </a>
+        </div>
+    </div>
+
+    <!-- LƯU Ý -->
+    <div class="exam-paper-notice">
+        <div class="exam-paper-notice-icon">
+            <i class="bi bi-info-circle-fill"></i>
+        </div>
+
+        <div class="exam-paper-notice-content">
+            <h5>Lưu ý về thao tác phiên bản đề</h5>
+
+            <ul>
+                <li>
+                    Phiên bản chưa có lượt thi có thể được chỉnh sửa.
+                </li>
+                <li>
+                    Phiên bản đã phân công nhưng chưa có lượt thi
+                    có thể được xóa; các phân công chưa bắt đầu sẽ bị hủy.
+                </li>
+                <li>
+                    Phiên bản đã có lượt thi sẽ khóa chức năng sửa và xóa
+                    để bảo toàn lịch sử thi.
+                </li>
+                <li>
+                    Chức năng sao chép luôn tạo ra một phiên bản độc lập
+                    và cho phép chỉnh sửa nội dung trước khi lưu.
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- BẢNG QUẢN LÝ -->
+    <div class="exam-paper-table-card">
+
+        <div class="exam-paper-table-heading">
+            <div>
+                <h4>
+                    <i class="bi bi-list-ul"></i>
+                    Danh sách phiên bản đề
+                </h4>
+                <p>Thông tin và trạng thái các phiên bản thuộc bài thi này</p>
+            </div>
+
+            <span class="exam-paper-total">
+                {{ paper_rows|length }} phiên bản
+            </span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table exam-paper-table align-middle mb-0">
+
+                <thead>
+                    <tr>
+                        <th class="text-center">STT</th>
+                        <th>Mã đề</th>
+                        <th>Tên phiên bản</th>
+                        <th class="text-center">Số câu hỏi</th>
+                        <th class="text-center">Đã phân công</th>
+                        <th class="text-center">Đã có lượt thi</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th class="text-center">Thao tác</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for row in paper_rows %}
+                    <tr>
+
+                        <td class="text-center">
+                            <span class="exam-paper-number">
+                                {{ row.paper.paper_number }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="exam-paper-code">
+                                {{ row.paper.paper_code }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div class="exam-paper-name">
+                                {{ row.paper.title|default:"Chưa đặt tên" }}
+                            </div>
+
+                            {% if row.paper.copied_from %}
+                            <div class="exam-paper-origin">
+                                <i class="bi bi-copy"></i>
+                                Sao chép từ mã đề
+                                {{ row.paper.copied_from.paper_code }}
+                            </div>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            <span class="exam-paper-count">
+                                <i class="bi bi-question-circle"></i>
+                                {{ row.paper.question_data|length }}
+                            </span>
+                        </td>
+
+                        <td class="text-center">
+                            <span class="exam-paper-count">
+                                <i class="bi bi-person-check"></i>
+                                {{ row.assignment_count }}
+                            </span>
+                        </td>
+
+                        <td class="text-center">
+                            {% if row.attempt_count > 0 %}
+                            <span class="exam-paper-attempt-count">
+                                {{ row.attempt_count }}
+                            </span>
+                            {% else %}
+                            <span class="exam-paper-zero">
+                                {{ row.attempt_count }}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            {% if row.paper.is_active %}
+                            <span class="exam-paper-status is-active">
+                                <i class="bi bi-check-circle-fill"></i>
+                                Đang sử dụng
+                            </span>
+                            {% else %}
+                            <span class="exam-paper-status is-inactive">
+                                <i class="bi bi-pause-circle-fill"></i>
+                                Ngừng sử dụng
+                            </span>
+                            {% endif %}
+
+                            {% if not row.can_modify %}
+                            <div class="exam-paper-locked">
+                                <i class="bi bi-lock-fill"></i>
+                                Đã khóa chỉnh sửa
+                            </div>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="exam-paper-actions">
+
+                                {% if row.can_modify %}
+                                <a href="{% url 'teacher_edit_exam_paper' exam.id row.paper.id %}"
+                                   class="exam-paper-action is-edit"
+                                   title="Chỉnh sửa phiên bản đề">
+                                    <i class="bi bi-pencil-square"></i>
+                                    Sửa
+                                </a>
+                                {% else %}
+                                <button type="button"
+                                        class="exam-paper-action is-disabled"
+                                        disabled
+                                        title="Phiên bản đã có lượt thi">
+                                    <i class="bi bi-lock"></i>
+                                    Sửa
+                                </button>
+                                {% endif %}
+
+                                <a href="{% url 'teacher_copy_exam_paper' exam.id row.paper.id %}"
+                                   class="exam-paper-action is-copy"
+                                   title="Sao chép và chỉnh sửa bản sao">
+                                    <i class="bi bi-copy"></i>
+                                    Sao chép
+                                </a>
+
+                                {% if row.can_modify %}
+                                <form method="POST"
+                                      action="{% url 'teacher_delete_exam_paper' exam.id row.paper.id %}"
+                                      onsubmit="return confirm('Bạn chắc chắn muốn xóa phiên bản {{ row.paper.paper_code }}?{% if row.assignment_count > 0 %} Các phân công chưa bắt đầu của phiên bản này cũng sẽ bị hủy.{% endif %}')">
+
+                                    {% csrf_token %}
+
+                                    <button type="submit"
+                                            class="exam-paper-action is-delete"
+                                            title="Xóa phiên bản đề">
+                                        <i class="bi bi-trash"></i>
+                                        Xóa
+                                    </button>
+                                </form>
+                                {% else %}
+                                <button type="button"
+                                        class="exam-paper-action is-disabled"
+                                        disabled
+                                        title="Không thể xóa phiên bản đã có lượt thi">
+                                    <i class="bi bi-lock"></i>
+                                    Xóa
+                                </button>
+                                {% endif %}
+
+                            </div>
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="exam-paper-empty">
+                                <div class="exam-paper-empty-icon">
+                                    <i class="bi bi-files"></i>
+                                </div>
+                                <h5>Chưa có phiên bản đề</h5>
+                                <p>
+                                    Bài thi này chưa có phiên bản đề nào.
+                                    Hãy tạo phiên bản đề đầu tiên để bắt đầu.
+                                </p>
+                                <a href="{% url 'teacher_create_exam_paper' exam.id %}"
+                                   class="exam-action-button exam-action-primary">
+                                    <i class="bi bi-plus-circle"></i>
+                                    Tạo phiên bản đề
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+
+            </table>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="exam-paper-table-footer">
+            <a href="{% url 'exam_list' %}"
+               class="exam-action-button exam-action-outline">
+                <i class="bi bi-arrow-left"></i>
+                Quay lại danh sách bài thi
+            </a>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

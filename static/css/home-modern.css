@@ -1,0 +1,433 @@
+/* =====================================================
+   STU_OnlineExam - Trang chủ hiện đại
+   File: static/css/home-modern.css
+   Tất cả class có tiền tố hx- để không xung đột home.css
+   Hiệu ứng theo phong cách Uiverse (viết lại, không chép nguyên)
+   ===================================================== */
+
+.hx-home {
+  --hx-primary: #003d99;
+  --hx-secondary: #0056cc;
+  --hx-accent: #38bdf8;
+  --hx-bg: #f5f8ff;
+  --hx-surface: #ffffff;
+  --hx-text: #172b4d;
+  --hx-muted: #64748b;
+  --hx-line: #dbe6fb;
+  --hx-shadow: 0 10px 30px rgba(0, 61, 153, 0.1);
+  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+  color: var(--hx-text);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Dark mode: hỗ trợ nhiều cách đặt class phổ biến */
+body.dark-mode .hx-home,
+body.dark .hx-home,
+[data-theme="dark"] .hx-home,
+[data-bs-theme="dark"] .hx-home {
+  --hx-bg: #0f1b33;
+  --hx-surface: #16264a;
+  --hx-text: #e6edf9;
+  --hx-muted: #9fb0cc;
+  --hx-line: #25375f;
+  --hx-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.hx-home *,
+.hx-home *::before,
+.hx-home *::after { box-sizing: border-box; }
+.hx-home h1, .hx-home h2, .hx-home h3, .hx-home p { margin: 0; }
+
+/* ---------- HERO ---------- */
+.hx-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  gap: 2rem;
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+  border-radius: 22px;
+  background: linear-gradient(120deg, #eaf2ff, #f5f8ff 45%, #dff1ff, #eaf2ff);
+  background-size: 250% 250%;
+  animation: hx-gradient 16s ease infinite;
+  overflow: hidden;
+  isolation: isolate;
+}
+body.dark-mode .hx-hero, body.dark .hx-hero,
+[data-theme="dark"] .hx-hero, [data-bs-theme="dark"] .hx-hero {
+  background: linear-gradient(120deg, #10224a, #0f1b33 50%, #12305a);
+  background-size: 250% 250%;
+}
+.hx-hero-compact { padding: clamp(1.25rem, 3vw, 2.25rem); }
+
+.hx-blob {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.45;
+  animation: hx-float 9s ease-in-out infinite;
+}
+.hx-blob-1 { width: 260px; height: 260px; background: var(--hx-accent); top: -80px; right: 8%; }
+.hx-blob-2 { width: 200px; height: 200px; background: var(--hx-secondary); bottom: -70px; left: 30%; opacity: 0.2; animation-delay: -4s; }
+
+.hx-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.8rem 0.3rem 0.4rem;
+  margin-bottom: 1rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--hx-secondary);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--hx-line);
+}
+.hx-eyebrow img { width: 24px; height: 24px; object-fit: contain; }
+
+.hx-title {
+  font-size: clamp(1.7rem, 3.6vw, 2.9rem);
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--hx-primary);
+  max-width: 22ch;
+}
+.hx-hero-compact .hx-title { font-size: clamp(1.5rem, 2.8vw, 2.2rem); max-width: none; }
+body.dark-mode .hx-title, body.dark .hx-title,
+[data-theme="dark"] .hx-title, [data-bs-theme="dark"] .hx-title { color: #ffffff; }
+
+.hx-lead {
+  margin-top: 1rem;
+  max-width: 58ch;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: var(--hx-muted);
+}
+.hx-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.5rem; }
+
+/* ---------- NÚT (kiểu Uiverse: quét ánh sáng) ---------- */
+.hx-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 46px;
+  padding: 0.7rem 1.4rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+.hx-btn i { transition: transform 0.25s ease; }
+.hx-btn:hover i { transform: translateX(3px) scale(1.08); }
+.hx-btn:hover { transform: translateY(-2px); }
+.hx-btn:active { transform: translateY(0) scale(0.98); }
+.hx-btn::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -80%;
+  width: 50%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.6s ease;
+}
+.hx-btn:hover::after { left: 130%; }
+.hx-btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--hx-secondary), var(--hx-primary));
+  box-shadow: 0 8px 20px rgba(0, 86, 204, 0.3);
+}
+.hx-btn-primary:hover { color: #fff; box-shadow: 0 12px 26px rgba(0, 86, 204, 0.4); }
+.hx-btn-ghost {
+  color: var(--hx-primary);
+  background: var(--hx-surface);
+  border: 1.5px solid var(--hx-line);
+}
+.hx-btn-ghost:hover { color: var(--hx-secondary); border-color: var(--hx-accent); }
+.hx-btn-light { color: var(--hx-primary); background: #fff; }
+.hx-btn-light:hover { color: var(--hx-secondary); }
+.hx-btn:focus-visible, .hx-card:focus-visible, .hx-row:focus-visible {
+  outline: 3px solid var(--hx-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- MINH HỌA + CHIP NỔI ---------- */
+.hx-hero-art { position: relative; display: flex; justify-content: center; }
+.hx-illus { width: min(100%, 400px); height: auto; animation: hx-float 7s ease-in-out infinite; }
+.hx-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--hx-primary);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--hx-line);
+  box-shadow: var(--hx-shadow);
+  animation: hx-float 6s ease-in-out infinite;
+}
+.hx-chip i { color: var(--hx-accent); }
+.hx-chip-a { top: 8%; left: 2%; }
+.hx-chip-b { top: 40%; right: 0; animation-delay: -2s; }
+.hx-chip-c { bottom: 8%; left: 6%; animation-delay: -4s; }
+body.dark-mode .hx-chip, body.dark .hx-chip,
+[data-theme="dark"] .hx-chip, [data-bs-theme="dark"] .hx-chip {
+  color: #fff; background: rgba(22, 38, 74, 0.85);
+}
+.hx-bigico {
+  display: grid; place-items: center;
+  width: 120px; height: 120px;
+  border-radius: 30px;
+  font-size: 3.4rem; color: #fff;
+  background: linear-gradient(135deg, var(--hx-secondary), var(--hx-primary));
+  box-shadow: var(--hx-shadow);
+  animation: hx-float 6s ease-in-out infinite;
+}
+
+/* ---------- SECTION ---------- */
+.hx-section { padding: clamp(2rem, 5vw, 3.5rem) 0; }
+.hx-section-alt {
+  margin: 0 calc(-1 * clamp(0px, 1vw, 8px));
+  padding-left: clamp(1rem, 3vw, 2rem);
+  padding-right: clamp(1rem, 3vw, 2rem);
+  border-radius: 22px;
+  background: var(--hx-bg);
+}
+.hx-tight { padding-top: 1.75rem; padding-bottom: 1.75rem; }
+.hx-head { margin-bottom: 1.75rem; }
+.hx-head h2 { font-size: clamp(1.4rem, 2.4vw, 1.9rem); font-weight: 700; color: var(--hx-primary); }
+body.dark-mode .hx-head h2, body.dark .hx-head h2,
+[data-theme="dark"] .hx-head h2, [data-bs-theme="dark"] .hx-head h2 { color: #fff; }
+.hx-head p { margin-top: 0.4rem; color: var(--hx-muted); }
+
+/* ---------- CARD (viền sáng chạy quanh khi hover, kiểu Uiverse) ---------- */
+.hx-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.hx-grid-quick { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.hx-card {
+  position: relative;
+  display: block;
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: var(--hx-surface);
+  border: 1px solid var(--hx-line);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hx-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--hx-angle, 0deg), transparent 0 70%, var(--hx-accent), var(--hx-secondary), transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.hx-card:hover { transform: translateY(-6px); box-shadow: var(--hx-shadow); color: inherit; }
+.hx-card:hover::before { opacity: 1; animation: hx-spin 3s linear infinite; }
+.hx-card h3 { margin: 1rem 0 0.4rem; font-size: 1.05rem; font-weight: 600; }
+.hx-card p { font-size: 0.92rem; line-height: 1.6; color: var(--hx-muted); }
+.hx-quick { display: flex; align-items: center; gap: 0.9rem; padding: 1.1rem 1.25rem; }
+.hx-quick h3 { margin: 0; font-size: 0.98rem; }
+
+@property --hx-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes hx-spin { to { --hx-angle: 360deg; } }
+
+/* ---------- ICON TILE ---------- */
+.hx-ico {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  font-size: 1.35rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--hx-secondary), var(--hx-primary));
+  box-shadow: 0 6px 14px rgba(0, 86, 204, 0.25);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.hx-card:hover .hx-ico, .hx-metric:hover .hx-ico { transform: rotate(-8deg) scale(1.12); }
+
+/* ---------- STEPS ---------- */
+.hx-steps {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem;
+  position: relative;
+  counter-reset: none;
+}
+.hx-step {
+  position: relative;
+  padding: 1.25rem;
+  border-radius: 16px;
+  background: var(--hx-surface);
+  border: 1px solid var(--hx-line);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hx-step:hover { transform: translateY(-4px); box-shadow: var(--hx-shadow); }
+.hx-step:not(:last-child)::after {
+  content: "";
+  position: absolute; top: 2.2rem; left: calc(100% + 2px);
+  width: calc(1.25rem - 4px); height: 2px;
+  background: repeating-linear-gradient(90deg, var(--hx-accent) 0 4px, transparent 4px 8px);
+}
+.hx-num {
+  display: grid; place-items: center;
+  width: 36px; height: 36px; border-radius: 50%;
+  font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, var(--hx-accent), var(--hx-secondary));
+}
+.hx-step h3 { margin: 0.8rem 0 0.25rem; font-size: 1rem; font-weight: 600; }
+.hx-step p { font-size: 0.88rem; color: var(--hx-muted); }
+
+/* ---------- CTA CUỐI (khách) ---------- */
+.hx-cta {
+  display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+  margin-top: 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(120deg, var(--hx-primary), var(--hx-secondary), var(--hx-primary));
+  background-size: 200% 200%;
+  animation: hx-gradient 14s ease infinite;
+}
+.hx-cta > i { font-size: 2.4rem; color: var(--hx-accent); }
+.hx-cta > div { flex: 1 1 260px; }
+.hx-cta h2 { font-size: 1.3rem; font-weight: 700; }
+.hx-cta p { margin-top: 0.3rem; opacity: 0.88; }
+
+/* ---------- METRICS ---------- */
+.hx-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin: 1.25rem 0;
+}
+.hx-metric {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.2rem 1.4rem;
+  border-radius: 18px;
+  background: var(--hx-surface);
+  border: 1px solid var(--hx-line);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hx-metric:hover { transform: translateY(-4px); box-shadow: var(--hx-shadow); }
+.hx-metric strong { display: block; font-size: 1.7rem; line-height: 1.1; color: var(--hx-primary); }
+.hx-metric span:not(.hx-ico) { font-size: 0.85rem; color: var(--hx-muted); }
+body.dark-mode .hx-metric strong, body.dark .hx-metric strong,
+[data-theme="dark"] .hx-metric strong, [data-bs-theme="dark"] .hx-metric strong { color: #fff; }
+
+/* ---------- PANELS: KHÓA HỌC + BÀI THI ---------- */
+.hx-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+.hx-panel {
+  padding: 1.4rem;
+  border-radius: 18px;
+  background: var(--hx-surface);
+  border: 1px solid var(--hx-line);
+  min-width: 0;
+}
+.hx-panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.hx-kicker { font-size: 0.78rem; font-weight: 600; color: var(--hx-secondary); }
+.hx-panel-head h2 { font-size: 1.2rem; font-weight: 700; }
+.hx-panel-head > a { font-size: 0.88rem; font-weight: 600; color: var(--hx-secondary); text-decoration: none; white-space: nowrap; }
+.hx-panel-head > a:hover i { transform: translateX(3px); }
+.hx-panel-head > a i { display: inline-block; transition: transform 0.2s ease; }
+
+.hx-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.hx-row {
+  display: flex; align-items: center; gap: 0.9rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--hx-bg);
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+a.hx-row:hover { transform: translateX(4px); border-color: var(--hx-accent); color: inherit; }
+.hx-code {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.78rem; font-weight: 700;
+  color: #fff;
+  background: var(--hx-secondary);
+}
+.hx-row-name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-date {
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+  width: 52px; padding: 0.35rem 0;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--hx-secondary), var(--hx-primary));
+  line-height: 1.1;
+}
+.hx-date strong { font-size: 1.15rem; }
+.hx-date small { font-size: 0.68rem; opacity: 0.85; }
+.hx-exam-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hx-exam-info span { font-size: 0.82rem; color: var(--hx-muted); }
+.hx-empty { padding: 1rem; text-align: center; color: var(--hx-muted); }
+
+/* ---------- ANIMATION ---------- */
+@keyframes hx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes hx-gradient { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes hx-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+.hx-in { animation: hx-rise 0.7s ease both; animation-delay: calc(var(--i, 0) * 0.12s); }
+
+/* Chỉ ẩn khi JS đã chạy (html.hx-js) nên không mất nội dung nếu JS lỗi */
+.hx-js .hx-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition-delay: calc(var(--i, 0) * 0.09s);
+}
+.hx-js .hx-reveal.is-in { opacity: 1; transform: none; }
+/* sau khi hiện xong, trả lại transition hover bình thường */
+.hx-js .hx-card.hx-reveal.is-in, .hx-js .hx-step.hx-reveal.is-in, .hx-js .hx-metric.hx-reveal.is-in {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.6s ease;
+  transition-delay: 0s;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1100px) {
+  .hx-grid { grid-template-columns: repeat(2, 1fr); }
+  .hx-steps { grid-template-columns: repeat(2, 1fr); }
+  .hx-step::after { display: none; }
+}
+@media (max-width: 900px) {
+  .hx-hero { grid-template-columns: 1fr; }
+  .hx-hero-art { order: -1; max-height: 260px; }
+  .hx-illus { width: min(70%, 280px); }
+  .hx-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .hx-grid, .hx-steps { grid-template-columns: 1fr; }
+  .hx-actions .hx-btn { flex: 1 1 100%; }
+  .hx-chip { font-size: 0.72rem; padding: 0.35rem 0.65rem; }
+  .hx-hero-art { max-height: 220px; }
+}
+
+/* ---------- GIẢM CHUYỂN ĐỘNG ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .hx-home, .hx-home * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .hx-js .hx-reveal { opacity: 1; transform: none; }
+}

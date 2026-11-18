@@ -90,6 +90,7 @@
     .profile-page .profile-banner { padding-top: 24px; }
     .profile-page .security-card { padding: 16px; }
   }
+
 </style>
 
 <div class="container profile-page">
@@ -311,6 +312,118 @@
         </div>
       </div>
     </div>
+
+      <!-- ================= TOTP LOGIN ================= -->
+      <div class="security-card mt-4">
+        <div class="security-card-head">
+          <div class="section-icon">
+            <i class="bi bi-shield-lock"></i>
+          </div>
+
+          <div class="flex-grow-1">
+            <h4>Đăng nhập bằng mã TOTP</h4>
+            <p>
+              Dùng ứng dụng Authenticator để tạo mã xác thực 6 chữ số.
+              Phương thức này không cần webcam.
+            </p>
+          </div>
+
+          {% if totp_device and totp_device.is_enabled %}
+            <span class="status-pill status-success">
+              <i class="bi bi-check-circle-fill"></i>
+              Đã bật
+            </span>
+          {% else %}
+            <span class="status-pill status-pending">
+              <i class="bi bi-clock"></i>
+              Chưa thiết lập
+            </span>
+          {% endif %}
+        </div>
+
+        {% if totp_device and totp_device.is_enabled %}
+          <div class="alert alert-success mt-3 mb-0">
+            <strong>TOTP đã được kích hoạt.</strong>
+            <p class="mb-0 mt-1">
+              Bạn có thể chọn “Mã TOTP” tại trang đăng nhập
+              và nhập tài khoản cùng mã 6 chữ số từ ứng dụng Authenticator.
+            </p>
+          </div>
+        {% else %}
+          <p class="small-note mt-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Nhấn nút bên dưới để tạo mã QR. Quét mã bằng ứng dụng
+            Authenticator, sau đó nhập mã 6 chữ số để xác nhận.
+          </p>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button
+              type="button"
+              id="totp-generate-button"
+              class="btn-stu"
+            >
+              <i class="bi bi-qr-code"></i>
+              Tạo mã QR TOTP
+            </button>
+          </div>
+
+          <div id="totp-setup-area" hidden>
+            <div class="qr-frame mt-3">
+              <img
+                id="totp-setup-qr"
+                class="qr-image"
+                alt="Mã QR thiết lập TOTP"
+              />
+            </div>
+
+            <p class="small-note text-center">
+              Quét mã QR bằng ứng dụng Authenticator của bạn.
+              Không chia sẻ mã QR này với người khác.
+            </p>
+
+            <form id="totp-confirm-form" class="mt-3">
+              {% csrf_token %}
+
+              <label
+                for="totp-confirm-code"
+                class="form-label"
+              >
+                Mã xác thực 6 chữ số
+              </label>
+
+              <input
+                type="text"
+                id="totp-confirm-code"
+                class="form-control"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                placeholder="Nhập mã từ ứng dụng"
+                required
+              />
+
+              <button
+                type="submit"
+                id="totp-confirm-button"
+                class="btn-stu mt-3"
+              >
+                <i class="bi bi-check-circle"></i>
+                Xác nhận và bật TOTP
+              </button>
+            </form>
+          </div>
+        {% endif %}
+
+        <div
+          id="totp-setup-message"
+          class="alert mt-3 mb-0"
+          style="display:none;"
+          role="status"
+          aria-live="polite"
+        ></div>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -434,4 +547,159 @@
 })();
 </script>
 {% endif %}
+
+{% if not totp_device or not totp_device.is_enabled %}
+<script>
+(() => {
+  "use strict";
+
+  const generateButton = document.getElementById("totp-generate-button");
+  const setupArea = document.getElementById("totp-setup-area");
+  const qrImage = document.getElementById("totp-setup-qr");
+  const confirmForm = document.getElementById("totp-confirm-form");
+  const confirmCode = document.getElementById("totp-confirm-code");
+  const confirmButton = document.getElementById("totp-confirm-button");
+  const message = document.getElementById("totp-setup-message");
+
+  if (
+    !generateButton ||
+    !setupArea ||
+    !qrImage ||
+    !confirmForm ||
+    !confirmCode ||
+    !confirmButton ||
+    !message
+  ) {
+    return;
+  }
+
+  let submitting = false;
+
+  function showMessage(text, type = "danger") {
+    message.textContent = text;
+    message.className = `alert alert-${type} mt-3 mb-0`;
+    message.style.display = "block";
+  }
+
+  function getCsrfToken() {
+    const input = document.querySelector(
+      'input[name="csrfmiddlewaretoken"]'
+    );
+
+    return input ? input.value : "";
+  }
+
+  async function postJson(url, body = {}) {
+    const csrfToken = getCsrfToken();
+
+    if (!csrfToken) {
+      throw new Error(
+        "Không tìm thấy CSRF token. Hãy tải lại trang."
+      );
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify(body),
+      credentials: "same-origin"
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data.success) {
+      throw new Error(
+        data.message || "Yêu cầu TOTP thất bại."
+      );
+    }
+
+    return data;
+  }
+
+  generateButton.addEventListener("click", async () => {
+    if (submitting) return;
+
+    submitting = true;
+    generateButton.disabled = true;
+    showMessage("Đang tạo mã QR TOTP...", "info");
+
+    try {
+      const data = await postJson(
+        "{% url 'totp_setup' %}"
+      );
+
+      if (!data.qr_image) {
+        throw new Error(
+          "Máy chủ chưa trả về ảnh QR TOTP."
+        );
+      }
+
+      qrImage.src = data.qr_image;
+      setupArea.hidden = false;
+
+      showMessage(
+        data.message || "Đã tạo mã QR. Hãy quét và nhập mã xác thực.",
+        "success"
+      );
+
+      confirmCode.focus();
+    } catch (error) {
+      showMessage(error.message || "Không thể tạo mã QR TOTP.");
+    } finally {
+      submitting = false;
+      generateButton.disabled = false;
+    }
+  });
+
+  confirmForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const code = confirmCode.value.trim();
+
+    if (!/^\d{6}$/.test(code)) {
+      showMessage(
+        "Mã xác thực phải gồm đúng 6 chữ số."
+      );
+      confirmCode.focus();
+      return;
+    }
+
+    if (submitting) return;
+
+    submitting = true;
+    confirmButton.disabled = true;
+    showMessage("Đang xác nhận mã TOTP...", "info");
+
+    try {
+      const data = await postJson(
+        "{% url 'totp_confirm' %}",
+        { code: code }
+      );
+
+      showMessage(
+        data.message || "Đã bật TOTP thành công.",
+        "success"
+      );
+
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch (error) {
+      showMessage(
+        error.message || "Không thể xác nhận mã TOTP."
+      );
+      confirmCode.value = "";
+      confirmCode.focus();
+    } finally {
+      submitting = false;
+      confirmButton.disabled = false;
+    }
+  });
+})();
+</script>
+{% endif %}
+
 {% endblock %}

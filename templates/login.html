@@ -167,7 +167,8 @@
 
     .auth-mode-switch {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        /*grid-template-columns: 1fr 1fr;*/
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 6px;
         padding: 5px;
         margin-bottom: 26px;
@@ -620,6 +621,19 @@
                             <span aria-hidden="true">◎</span>
                             <span>Khuôn mặt</span>
                         </button>
+
+                        <button
+                            type="button"
+                            id="mode-totp-button"
+                            class="auth-mode-button"
+                            role="tab"
+                            aria-selected="false"
+                            aria-controls="totp-panel"
+                        >
+                            <span aria-hidden="true">#</span>
+                            <span>Mã TOTP</span>
+                        </button>
+
                     </div>
 
                     <!-- ================= QR LOGIN: GIỮ NGUYÊN API CŨ ================= -->
@@ -709,6 +723,78 @@
                         </div>
                     </section>
 
+                    <!-- ================= TOTP LOGIN ================= -->
+                    <section
+                        id="totp-panel"
+                        class="auth-mode-panel"
+                        role="tabpanel"
+                        aria-labelledby="mode-totp-button"
+                        hidden
+                    >
+                        <h2 class="auth-section-title">Đăng nhập bằng mã xác thực</h2>
+
+                        <p class="auth-section-description">
+                            Nhập tên tài khoản, mã số sinh viên hoặc mã số giảng viên
+                            và mã 6 chữ số từ ứng dụng xác thực của bạn.
+                        </p>
+
+                        <form id="totp-login-form">
+                            {% csrf_token %}
+
+                            <div class="mb-3">
+                                <label for="totp-identifier" class="form-label">
+                                    Tài khoản hoặc mã số
+                                </label>
+                                <input
+                                    type="text"
+                                    id="totp-identifier"
+                                    class="form-control"
+                                    autocomplete="username"
+                                    maxlength="150"
+                                    required
+                                    placeholder="Nhập tài khoản hoặc mã số"
+                                >
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="totp-code" class="form-label">
+                                    Mã xác thực 6 chữ số
+                                </label>
+                                <input
+                                    type="text"
+                                    id="totp-code"
+                                    class="form-control"
+                                    inputmode="numeric"
+                                    autocomplete="one-time-code"
+                                    pattern="[0-9]{6}"
+                                    maxlength="6"
+                                    required
+                                    placeholder="000000"
+                                >
+                            </div>
+
+                            <button
+                                type="submit"
+                                id="totp-login-button"
+                                class="auth-primary-button w-100"
+                            >
+                                Đăng nhập bằng TOTP
+                            </button>
+
+                            <div
+                                id="totp-status-message"
+                                class="auth-status"
+                                role="status"
+                                aria-live="polite"
+                            ></div>
+                        </form>
+
+                        <p class="auth-help mt-3 mb-0">
+                            Phương thức này không cần sử dụng camera. Tài khoản cần được
+                            kích hoạt TOTP trước đó trong hồ sơ cá nhân.
+                        </p>
+                    </section>
+
                     <div class="auth-divider">HỖ TRỢ</div>
                     <p class="auth-help mb-0">
                         Không đăng nhập được?
@@ -755,7 +841,13 @@
     const facePanel = document.getElementById("face-panel");
     const qrModeButton = document.getElementById("mode-qr-button");
     const faceModeButton = document.getElementById("mode-face-button");
-
+    const totpPanel = document.getElementById("totp-panel");
+    const totpModeButton = document.getElementById("mode-totp-button");
+    const totpLoginForm = document.getElementById("totp-login-form");
+    const totpIdentifier = document.getElementById("totp-identifier");
+    const totpCode = document.getElementById("totp-code");
+    const totpLoginButton = document.getElementById("totp-login-button");
+    const totpStatusMessage = document.getElementById("totp-status-message");
     const qrStatus = document.getElementById("status-message");
     const qrError = document.getElementById("qr-error-message");
     const qrStatusDot = document.getElementById("qr-status-dot");
@@ -935,34 +1027,190 @@
         // html5-qrcode phát sinh nhiều lỗi nhỏ khi chưa nhận được QR; bỏ qua.
     }
 
-    async function switchMode(mode) {
-        if (mode === activeMode) return;
+    // async function switchMode(mode) {
+    //     if (mode === activeMode) return;
+    //
+    //     activeMode = mode;
+    //     clearStatus(qrError);
+    //     clearStatus(faceStatusMessage);
+    //
+    //     const isQr = mode === "qr";
+    //     qrPanel.hidden = !isQr;
+    //     facePanel.hidden = isQr;
+    //
+    //     qrModeButton.classList.toggle("active", isQr);
+    //     faceModeButton.classList.toggle("active", !isQr);
+    //     qrModeButton.setAttribute("aria-selected", String(isQr));
+    //     faceModeButton.setAttribute("aria-selected", String(!isQr));
+    //
+    //     if (isQr) {
+    //         stopFaceCamera();
+    //         await startQrScanner();
+    //     } else {
+    //         await stopQrScanner();
+    //         setQrStatus("Máy quét QR đã tạm dừng.");
+    //         setFaceCameraStatus("Nhấn “Bật camera” để bắt đầu.");
+    //     }
+    // }
 
-        activeMode = mode;
-        clearStatus(qrError);
-        clearStatus(faceStatusMessage);
 
-        const isQr = mode === "qr";
-        qrPanel.hidden = !isQr;
-        facePanel.hidden = isQr;
+        async function switchMode(mode) {
+            if (!["qr", "face", "totp"].includes(mode)) {
+                return;
+            }
 
-        qrModeButton.classList.toggle("active", isQr);
-        faceModeButton.classList.toggle("active", !isQr);
-        qrModeButton.setAttribute("aria-selected", String(isQr));
-        faceModeButton.setAttribute("aria-selected", String(!isQr));
+            if (mode === activeMode) {
+                return;
+            }
 
-        if (isQr) {
-            stopFaceCamera();
-            await startQrScanner();
-        } else {
+            activeMode = mode;
+
+            // Xóa thông báo cũ khi chuyển phương thức.
+            clearStatus(qrError);
+            clearStatus(faceStatusMessage);
+            clearStatus(totpStatusMessage);
+
+            // Chỉ hiển thị bảng tương ứng với phương thức đang chọn.
+            const isQr = mode === "qr";
+            const isFace = mode === "face";
+            const isTotp = mode === "totp";
+
+            qrPanel.hidden = !isQr;
+            facePanel.hidden = !isFace;
+            totpPanel.hidden = !isTotp;
+
+            // Cập nhật trạng thái trực quan của ba nút.
+            qrModeButton.classList.toggle("active", isQr);
+            faceModeButton.classList.toggle("active", isFace);
+            totpModeButton.classList.toggle("active", isTotp);
+
+            qrModeButton.setAttribute("aria-selected", String(isQr));
+            faceModeButton.setAttribute("aria-selected", String(isFace));
+            totpModeButton.setAttribute("aria-selected", String(isTotp));
+
+            if (isQr) {
+                // Chuyển về QR: tắt camera khuôn mặt rồi khởi động QR.
+                stopFaceCamera();
+                await startQrScanner();
+                return;
+            }
+
+            // Khi rời QR, dừng máy quét trước khi tiếp tục.
             await stopQrScanner();
             setQrStatus("Máy quét QR đã tạm dừng.");
-            setFaceCameraStatus("Nhấn “Bật camera” để bắt đầu.");
+
+            if (isFace) {
+                // Chỉ bật webcam khi người dùng nhấn nút Bật camera.
+                setFaceCameraStatus("Nhấn “Bật camera” để bắt đầu.");
+                return;
+            }
+
+            if (isTotp) {
+                // TOTP không cần webcam.
+                stopFaceCamera();
+                totpIdentifier.focus();
+            }
         }
-    }
+
 
     qrModeButton.addEventListener("click", () => switchMode("qr"));
     faceModeButton.addEventListener("click", () => switchMode("face"));
+    totpModeButton.addEventListener("click", () => switchMode("totp"));
+
+totpLoginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const identifier = totpIdentifier.value.trim();
+    const code = totpCode.value.trim();
+
+    if (!identifier) {
+        showStatus(
+            totpStatusMessage,
+            "Vui lòng nhập tài khoản hoặc mã số.",
+            "error"
+        );
+        totpIdentifier.focus();
+        return;
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+        showStatus(
+            totpStatusMessage,
+            "Mã xác thực phải gồm đúng 6 chữ số.",
+            "error"
+        );
+        totpCode.focus();
+        return;
+    }
+
+    totpLoginButton.disabled = true;
+    totpLoginButton.textContent = "Đang xác minh...";
+
+    showStatus(
+        totpStatusMessage,
+        "Đang kiểm tra mã xác thực. Vui lòng chờ...",
+        "info"
+    );
+
+    try {
+        const response = await fetch('{% url "verify_totp_login" %}', {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCsrfToken()
+            },
+            body: JSON.stringify({
+                identifier: identifier,
+                code: code
+            })
+        });
+
+        let data;
+
+        try {
+            data = await response.json();
+        } catch (_) {
+            throw new Error(
+                "Máy chủ trả về dữ liệu không hợp lệ. Hãy kiểm tra log Django."
+            );
+        }
+
+        if (response.ok && data.success) {
+            showStatus(
+                totpStatusMessage,
+                (data.message || "Đăng nhập thành công.") +
+                    " Đang chuyển hướng...",
+                "success"
+            );
+
+            window.location.href = data.redirect_url || "/";
+            return;
+        }
+
+        showStatus(
+            totpStatusMessage,
+            data.message || "Không thể đăng nhập bằng TOTP.",
+            "error"
+        );
+
+        // Xóa mã cũ để tránh vô tình gửi lại mã đã sử dụng.
+        totpCode.value = "";
+        totpCode.focus();
+
+    } catch (error) {
+        console.error("Lỗi đăng nhập TOTP:", error);
+
+        showStatus(
+            totpStatusMessage,
+            error.message || "Không thể kết nối tới máy chủ. Vui lòng thử lại.",
+            "error"
+        );
+
+    } finally {
+        totpLoginButton.disabled = false;
+        totpLoginButton.textContent = "Đăng nhập bằng TOTP";
+    }
+});
 
     async function startFaceCamera() {
         if (faceStream) return;

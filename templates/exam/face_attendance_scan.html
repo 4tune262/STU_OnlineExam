@@ -1,0 +1,1028 @@
+
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .attendance-page {
+        --stu-navy: #0b3e63;
+        --stu-blue: #0876b9;
+        --stu-border: #e1e8ef;
+        --stu-muted: #718096;
+        color: #26394b;
+        padding-bottom: 32px;
+    }
+
+    .attendance-page .page-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 26px 28px;
+        border-radius: 15px;
+        color: #fff;
+        background: linear-gradient(115deg, #083452 0%, #0b527e 68%, #0876b9 100%);
+        box-shadow: 0 8px 24px rgba(8, 52, 82, .12);
+    }
+
+    .attendance-page .page-hero h1 {
+        margin: 0 0 7px;
+        font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+        font-weight: 700;
+    }
+
+    .attendance-page .hero-label {
+        margin-bottom: 5px;
+        color: #c9e7fb;
+        font-size: .74rem;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+    }
+
+    .attendance-page .hero-description {
+        margin: 0;
+        color: #e0eff9;
+        font-size: .9rem;
+        line-height: 1.65;
+    }
+
+    .attendance-page .hero-icon {
+        display: flex;
+        width: 52px;
+        height: 52px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 13px;
+        background: rgba(255,255,255,.12);
+        font-size: 24px;
+    }
+
+    .attendance-page .back-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border: 1px solid rgba(255,255,255,.45);
+        border-radius: 8px;
+        color: #fff;
+        font-size: .84rem;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background .2s ease;
+    }
+
+    .attendance-page .back-button:hover {
+        background: rgba(255,255,255,.13);
+        color: #fff;
+    }
+
+    .attendance-page .exam-info {
+        display: flex;
+        min-height: 83px;
+        align-items: center;
+        gap: 13px;
+        padding: 15px 17px;
+        border: 1px solid var(--stu-border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 3px 12px rgba(15,23,42,.025);
+    }
+
+    .attendance-page .exam-info-icon {
+        display: flex;
+        width: 42px;
+        height: 42px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 11px;
+        background: #eaf3fb;
+        color: var(--stu-navy);
+        font-size: 19px;
+    }
+
+    .attendance-page .exam-info-label {
+        margin-bottom: 4px;
+        color: var(--stu-muted);
+        font-size: .76rem;
+    }
+
+    .attendance-page .exam-info-value {
+        overflow-wrap: anywhere;
+        color: #193b55;
+        font-size: .9rem;
+        font-weight: 700;
+    }
+
+    .attendance-page .content-panel {
+        height: 100%;
+        overflow: hidden;
+        border: 1px solid var(--stu-border);
+        border-radius: 13px;
+        background: #fff;
+        box-shadow: 0 4px 15px rgba(15,23,42,.035);
+    }
+
+    .attendance-page .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 17px 20px;
+        border-bottom: 1px solid var(--stu-border);
+    }
+
+    .attendance-page .panel-title {
+        margin: 0;
+        color: #173b57;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .attendance-page .panel-subtitle {
+        margin-top: 4px;
+        color: var(--stu-muted);
+        font-size: .8rem;
+        line-height: 1.5;
+    }
+
+    .attendance-page .panel-body {
+        padding: 20px;
+    }
+
+    /* Khung camera kiểu face-login */
+    .attendance-page .camera-stage {
+        position: relative;
+        display: flex;
+        overflow: hidden;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        min-height: 270px;
+        max-height: 500px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #18374e;
+        border-radius: 13px;
+        background:
+            radial-gradient(ellipse at center, #203d52 0%, #101e2b 72%);
+        isolation: isolate;
+    }
+
+    .attendance-page #attendanceVideo {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: #101e2b;
+    }
+
+    /* Lớp phủ ngắm khuôn mặt, không can thiệp vào ảnh gửi lên API */
+    .attendance-page .camera-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        pointer-events: none;
+    }
+
+    .attendance-page .face-guide {
+        position: relative;
+        width: min(54%, 235px);
+        height: 70%;
+        max-height: 330px;
+        border: 2px solid rgba(91, 213, 255, .9);
+        border-radius: 48% 48% 43% 43% / 38% 38% 48% 48%;
+        box-shadow:
+            0 0 0 999px rgba(4, 16, 28, .18),
+            0 0 15px rgba(36, 184, 244, .18),
+            inset 0 0 18px rgba(36, 184, 244, .08);
+    }
+
+    .attendance-page .face-guide::before,
+    .attendance-page .face-guide::after {
+        content: "";
+        position: absolute;
+        left: 17%;
+        right: 17%;
+        height: 1px;
+        background: rgba(91, 213, 255, .55);
+    }
+
+    .attendance-page .face-guide::before {
+        top: 36%;
+    }
+
+    .attendance-page .face-guide::after {
+        top: 55%;
+    }
+
+    .attendance-page .guide-corner {
+        position: absolute;
+        width: 23px;
+        height: 23px;
+        border-color: #71e0ff;
+        border-style: solid;
+    }
+
+    .attendance-page .guide-corner.top-left {
+        top: -3px;
+        left: -3px;
+        border-width: 3px 0 0 3px;
+        border-top-left-radius: 8px;
+    }
+
+    .attendance-page .guide-corner.top-right {
+        top: -3px;
+        right: -3px;
+        border-width: 3px 3px 0 0;
+        border-top-right-radius: 8px;
+    }
+
+    .attendance-page .guide-corner.bottom-left {
+        bottom: -3px;
+        left: -3px;
+        border-width: 0 0 3px 3px;
+        border-bottom-left-radius: 8px;
+    }
+
+    .attendance-page .guide-corner.bottom-right {
+        right: -3px;
+        bottom: -3px;
+        border-width: 0 3px 3px 0;
+        border-bottom-right-radius: 8px;
+    }
+
+    .attendance-page .camera-hint {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        left: 12px;
+        z-index: 3;
+        padding: 9px 12px;
+        border: 1px solid rgba(255,255,255,.15);
+        border-radius: 8px;
+        background: rgba(5, 22, 36, .76);
+        color: #e4f5ff;
+        font-size: .77rem;
+        text-align: center;
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+    }
+
+    .attendance-page .camera-hint i {
+        margin-right: 5px;
+        color: #70d9ff;
+    }
+
+    .attendance-page .camera-placeholder {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #101e2b;
+        color: #d5e4ef;
+        text-align: center;
+        pointer-events: none;
+    }
+
+    .attendance-page .camera-placeholder i {
+        margin-bottom: 13px;
+        color: #71bfe9;
+        font-size: 42px;
+    }
+
+    .attendance-page .camera-placeholder strong {
+        margin-bottom: 7px;
+        font-size: .96rem;
+    }
+
+    .attendance-page .camera-placeholder span {
+        max-width: 290px;
+        color: #a9bdce;
+        font-size: .81rem;
+        line-height: 1.6;
+    }
+
+    .attendance-page .camera-placeholder.is-hidden {
+        display: none;
+    }
+
+    .attendance-page .camera-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 10px;
+        border: 1px solid #dce5ed;
+        border-radius: 20px;
+        background: #f5f8fb;
+        color: #637589;
+        font-size: .75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .attendance-page .camera-state.is-on {
+        border-color: #b8e5cc;
+        background: #eaf8f0;
+        color: #197447;
+    }
+
+    .attendance-page .state-dot {
+        width: 7px;
+        height: 7px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .attendance-page .action-button {
+        display: inline-flex;
+        min-height: 41px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 14px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        font-size: .84rem;
+        font-weight: 650;
+        transition: background .18s ease, border-color .18s ease;
+    }
+
+    .attendance-page .action-button:disabled {
+        cursor: not-allowed;
+        opacity: .52;
+    }
+
+    .attendance-page .action-primary {
+        border-color: var(--stu-navy);
+        background: var(--stu-navy);
+        color: #fff;
+    }
+
+    .attendance-page .action-primary:hover:not(:disabled) {
+        background: #083452;
+    }
+
+    .attendance-page .action-success {
+        border-color: #198754;
+        background: #198754;
+        color: #fff;
+    }
+
+    .attendance-page .action-success:hover:not(:disabled) {
+        background: #146c43;
+    }
+
+    .attendance-page .action-danger {
+        border-color: #d8e1e9;
+        background: #fff;
+        color: #ad3540;
+    }
+
+    .attendance-page .action-danger:hover:not(:disabled) {
+        background: #fff3f3;
+    }
+
+    .attendance-page .consent-box {
+        padding: 14px 15px;
+        border: 1px solid #e0e8ef;
+        border-radius: 10px;
+        background: #f8fafc;
+    }
+
+    .attendance-page .consent-box .form-check-label {
+        color: #40566a;
+        font-size: .82rem;
+        line-height: 1.7;
+    }
+
+    .attendance-page .privacy-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 12px 0 0;
+        color: var(--stu-muted);
+        font-size: .77rem;
+        line-height: 1.65;
+    }
+
+    .attendance-page .privacy-note i {
+        margin-top: 2px;
+        color: #47799e;
+    }
+
+    .attendance-page #scanStatus {
+        display: flex;
+        min-height: 88px;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid #dce5ed;
+        border-radius: 10px;
+        font-size: .84rem;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+
+    .attendance-page #scanStatus::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        flex-shrink: 0;
+        margin-top: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .attendance-page #scanStatus.alert-success {
+        border-color: #b9e5cc;
+        background: #edf9f2;
+        color: #176b41;
+    }
+
+    .attendance-page #scanStatus.alert-danger {
+        border-color: #f1c6c9;
+        background: #fff3f3;
+        color: #a52c37;
+    }
+
+    .attendance-page #scanStatus.alert-warning {
+        border-color: #f0ddb0;
+        background: #fff9e9;
+        color: #8b6414;
+    }
+
+    .attendance-page #scanStatus.alert-info {
+        border-color: #c9e4f6;
+        background: #eff8fe;
+        color: #175b84;
+    }
+
+    .attendance-page #scanStatus.alert-secondary {
+        border-color: #dce5ed;
+        background: #f5f8fb;
+        color: #596c7e;
+    }
+
+    .attendance-page .result-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 19px 0 12px;
+    }
+
+    .attendance-page .result-summary strong {
+        color: #25445d;
+        font-size: .86rem;
+    }
+
+    .attendance-page .result-count {
+        display: inline-flex;
+        min-width: 30px;
+        height: 30px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 8px;
+        border-radius: 9px;
+        background: #eaf3fb;
+        color: #165783;
+        font-weight: 700;
+    }
+
+    .attendance-page #attendanceList {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 390px;
+        overflow-y: auto;
+        padding: 0;
+        border: 0;
+    }
+
+    .attendance-page #attendanceList .list-group-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid #e5ebf1;
+        border-radius: 9px;
+        background: #fff;
+        color: #28445a;
+        font-size: .83rem;
+    }
+
+    .attendance-page .student-name {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+        overflow-wrap: anywhere;
+        font-weight: 600;
+    }
+
+    .attendance-page .student-icon {
+        display: inline-flex;
+        width: 34px;
+        height: 34px;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        background: #eaf8f0;
+        color: #198754;
+    }
+
+    .attendance-page .success-badge {
+        flex-shrink: 0;
+        padding: 5px 8px;
+        border-radius: 20px;
+        background: #eaf8f0;
+        color: #197447;
+        font-size: .69rem;
+        font-weight: 700;
+    }
+
+    .attendance-page #attendanceList .empty-item {
+        justify-content: center;
+        padding: 26px 15px;
+        border-style: dashed;
+        background: #fafcfe;
+        color: #7a8a99;
+        text-align: center;
+        line-height: 1.7;
+    }
+
+    .attendance-page .instruction-box {
+        padding: 16px 19px;
+        border: 1px solid #d9eaf7;
+        border-radius: 12px;
+        background: #f3f9fe;
+    }
+
+    .attendance-page .instruction-title {
+        margin-bottom: 8px;
+        color: #194b70;
+        font-size: .88rem;
+        font-weight: 700;
+    }
+
+    .attendance-page .instruction-box p {
+        margin: 0;
+        color: #536e83;
+        font-size: .82rem;
+        line-height: 1.8;
+    }
+
+    @media (max-width: 767.98px) {
+        .attendance-page .page-hero {
+            padding: 21px 18px;
+        }
+
+        .attendance-page .panel-body {
+            padding: 15px;
+        }
+
+        .attendance-page .camera-stage {
+            min-height: 230px;
+        }
+
+        .attendance-page .action-button {
+            flex: 1 1 auto;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block body_block %}
+<div class="container-fluid px-3 px-lg-4 py-4 attendance-page">
+
+    <section class="page-hero mb-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="hero-icon">
+                    <i class="bi bi-person-bounding-box"></i>
+                </div>
+                <div>
+                    <div class="hero-label">Không gian giảng viên</div>
+                    <h1>Điểm danh khuôn mặt</h1>
+                    <p class="hero-description">
+                        Xác minh danh tính sinh viên tham gia bài thi trực tiếp tại lớp.
+                    </p>
+                </div>
+            </div>
+
+            <a href="{% url 'face_attendance' %}" class="back-button">
+                <i class="bi bi-arrow-left"></i>
+                Danh sách bài thi
+            </a>
+        </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="exam-info">
+                <div class="exam-info-icon"><i class="bi bi-file-earmark-text"></i></div>
+                <div class="min-w-0">
+                    <div class="exam-info-label">Bài thi</div>
+                    <div class="exam-info-value">{{ exam.title }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="exam-info">
+                <div class="exam-info-icon"><i class="bi bi-book"></i></div>
+                <div class="min-w-0">
+                    <div class="exam-info-label">Môn học</div>
+                    <div class="exam-info-value">{{ exam.course.name }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="exam-info">
+                <div class="exam-info-icon"><i class="bi bi-people"></i></div>
+                <div class="min-w-0">
+                    <div class="exam-info-label">Lớp học phần</div>
+                    <div class="exam-info-value">{{ exam.offering.group_code }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-xl-7">
+            <section class="content-panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">
+                            <i class="bi bi-camera-video me-2"></i>Khu vực xác minh
+                        </h2>
+                        <div class="panel-subtitle">
+                            Căn chỉnh khuôn mặt trong khung ngắm trước khi quét.
+                        </div>
+                    </div>
+
+                    <span id="cameraIndicator" class="camera-state">
+                        <span class="state-dot"></span>
+                        <span id="cameraStateText">Camera chưa bật</span>
+                    </span>
+                </div>
+
+                <div class="panel-body">
+                    <div class="camera-stage mb-3">
+                        <video id="attendanceVideo"
+                               autoplay
+                               playsinline
+                               muted></video>
+
+                        <div class="camera-overlay" aria-hidden="true">
+                            <div class="face-guide">
+                                <span class="guide-corner top-left"></span>
+                                <span class="guide-corner top-right"></span>
+                                <span class="guide-corner bottom-left"></span>
+                                <span class="guide-corner bottom-right"></span>
+                            </div>
+                        </div>
+
+                        <div class="camera-hint">
+                            <i class="bi bi-bounding-box"></i>
+                            Giữ khuôn mặt ở giữa khung ngắm
+                        </div>
+
+                        <div id="cameraPlaceholder" class="camera-placeholder">
+                            <i class="bi bi-camera-video-off"></i>
+                            <strong>Camera chưa được khởi động</strong>
+                            <span>
+                                Nhấn nút bật camera và cho phép trình duyệt truy cập thiết bị.
+                            </span>
+                        </div>
+                    </div>
+
+                    <canvas id="attendanceCanvas" class="d-none"></canvas>
+
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <button type="button" id="startCameraBtn"
+                                class="action-button action-primary">
+                            <i class="bi bi-camera-video"></i>
+                            Bật camera
+                        </button>
+
+                        <button type="button" id="scanBtn"
+                                class="action-button action-success" disabled>
+                            <i class="bi bi-person-check"></i>
+                            Quét và điểm danh
+                        </button>
+
+                        <button type="button" id="stopCameraBtn"
+                                class="action-button action-danger" disabled>
+                            <i class="bi bi-camera-video-off"></i>
+                            Tắt camera
+                        </button>
+                    </div>
+
+                    <div class="consent-box">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   value="1"
+                                   id="consentCheckbox">
+
+                            <label class="form-check-label fw-semibold"
+                                   for="consentCheckbox">
+                                Tôi xác nhận đã thông báo và có sự đồng ý cần thiết của sinh viên
+                                đối với việc xử lý ảnh khuôn mặt nhằm xác minh điểm danh cho bài thi này.
+                            </label>
+                        </div>
+                    </div>
+
+                    <p class="privacy-note">
+                        <i class="bi bi-shield-lock-fill"></i>
+                        <span>
+                            Ảnh webcam được gửi đến máy chủ để nhận diện.
+                            Không sử dụng ảnh này để tự động đăng nhập tài khoản sinh viên.
+                        </span>
+                    </p>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <section class="content-panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">
+                            <i class="bi bi-clipboard2-check me-2"></i>Kết quả điểm danh
+                        </h2>
+                        <div class="panel-subtitle">
+                            Theo dõi trạng thái xác minh của từng sinh viên.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-body">
+                    <div id="scanStatus" class="alert alert-secondary mb-0"
+                         role="status" aria-live="polite">
+                        Bật camera để bắt đầu.
+                    </div>
+
+                    <div class="result-summary">
+                        <strong>Sinh viên đã quét trong phiên</strong>
+                        <span id="attendanceCount" class="result-count">0</span>
+                    </div>
+
+                    <ul id="attendanceList" class="list-group">
+                        <li class="list-group-item empty-item" id="emptyAttendance">
+                            <div>
+                                <i class="bi bi-person-lines-fill d-block fs-3 mb-2"></i>
+                                Chưa có sinh viên nào được quét thành công.
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <section class="instruction-box">
+        <div class="instruction-title">
+            <i class="bi bi-info-circle-fill me-2"></i>Hướng dẫn điểm danh
+        </div>
+        <p>
+            1. Bật camera và kiểm tra ánh sáng.
+            2. Xác nhận đã có sự đồng ý cần thiết.
+            3. Để từng sinh viên đứng trước camera, chỉ một khuôn mặt trong khung hình.
+            4. Nhấn “Quét và điểm danh” và kiểm tra thông báo trả về.
+        </p>
+    </section>
+</div>
+
+<script>
+(() => {
+    "use strict";
+
+    const video = document.getElementById("attendanceVideo");
+    const canvas = document.getElementById("attendanceCanvas");
+    const startBtn = document.getElementById("startCameraBtn");
+    const scanBtn = document.getElementById("scanBtn");
+    const stopBtn = document.getElementById("stopCameraBtn");
+    const consentCheckbox = document.getElementById("consentCheckbox");
+    const statusBox = document.getElementById("scanStatus");
+    const attendanceList = document.getElementById("attendanceList");
+    const emptyAttendance = document.getElementById("emptyAttendance");
+
+    const apiUrl = "{% url 'verify_face_attendance' exam.id %}";
+    let cameraStream = null;
+    let scanning = false;
+    const scannedNames = new Set();
+
+    function showStatus(message, type = "secondary") {
+        statusBox.className = `alert alert-${type} mb-0`;
+        statusBox.textContent = message;
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showStatus(
+                "Trình duyệt không hỗ trợ camera hoặc trang không chạy trên HTTPS/localhost.",
+                "danger"
+            );
+            return;
+        }
+
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    facingMode: "user",
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                }
+            });
+
+            video.srcObject = cameraStream;
+            await video.play();
+
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            scanBtn.disabled = false;
+
+            document.getElementById("cameraPlaceholder").classList.add("is-hidden");
+            document.getElementById("cameraIndicator").classList.add("is-on");
+            document.getElementById("cameraStateText").textContent = "Camera đang bật";
+
+            showStatus("Camera đã sẵn sàng. Xác nhận đồng ý trước khi quét.", "info");
+        } catch (error) {
+            showStatus(
+                "Không thể mở camera. Hãy cấp quyền camera cho trình duyệt và thử lại.",
+                "danger"
+            );
+        }
+    }
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        video.srcObject = null;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        scanBtn.disabled = true;
+
+        document.getElementById("cameraPlaceholder").classList.remove("is-hidden");
+        document.getElementById("cameraIndicator").classList.remove("is-on");
+        document.getElementById("cameraStateText").textContent = "Camera chưa bật";
+
+        showStatus("Camera đã tắt.", "secondary");
+    }
+
+    function addAttendance(name, message) {
+        if (emptyAttendance && emptyAttendance.parentNode) {
+            emptyAttendance.remove();
+        }
+
+        if (scannedNames.has(name)) {
+            return;
+        }
+
+        scannedNames.add(name);
+
+        const item = document.createElement("li");
+        item.className = "list-group-item";
+
+        const nameContainer = document.createElement("span");
+        nameContainer.className = "student-name";
+
+        const icon = document.createElement("span");
+        icon.className = "student-icon";
+        icon.innerHTML = '<i class="bi bi-person-check-fill"></i>';
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = name;
+
+        nameContainer.appendChild(icon);
+        nameContainer.appendChild(nameSpan);
+
+        const badge = document.createElement("span");
+        badge.className = "success-badge";
+        badge.textContent = message;
+
+        item.appendChild(nameContainer);
+        item.appendChild(badge);
+        attendanceList.prepend(item);
+
+        document.getElementById("attendanceCount").textContent = scannedNames.size;
+    }
+
+    async function scanFace() {
+        if (scanning) return;
+
+        if (!cameraStream || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            showStatus("Camera chưa sẵn sàng. Hãy bật camera trước.", "warning");
+            return;
+        }
+
+        if (!consentCheckbox.checked) {
+            showStatus("Vui lòng xác nhận đã có sự đồng ý xử lý ảnh khuôn mặt.", "warning");
+            return;
+        }
+
+        scanning = true;
+        scanBtn.disabled = true;
+        showStatus("Đang gửi ảnh để xác minh khuôn mặt...", "info");
+
+        try {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const context = canvas.getContext("2d");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const image = canvas.toDataURL("image/jpeg", 0.85);
+
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken")
+                },
+                body: JSON.stringify({
+                    consent: true,
+                    image: image
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                showStatus(
+                    result.message || "Không thể xác minh khuôn mặt.",
+                    "danger"
+                );
+                return;
+            }
+
+            showStatus(
+                `${result.message} Sinh viên: ${result.student}.`,
+                "success"
+            );
+
+            addAttendance(
+                result.student,
+                result.created ? "Vừa điểm danh" : "Đã điểm danh"
+            );
+        } catch (error) {
+            showStatus(
+                "Không thể kết nối máy chủ. Hãy kiểm tra kết nối và thử lại.",
+                "danger"
+            );
+        } finally {
+            scanning = false;
+            scanBtn.disabled = !cameraStream;
+        }
+    }
+
+    function getCookie(name) {
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+
+        for (const cookie of cookies) {
+            const trimmed = cookie.trim();
+
+            if (trimmed.startsWith(name + "=")) {
+                return decodeURIComponent(trimmed.substring(name.length + 1));
+            }
+        }
+
+        return "";
+    }
+
+    startBtn.addEventListener("click", startCamera);
+    stopBtn.addEventListener("click", stopCamera);
+    scanBtn.addEventListener("click", scanFace);
+
+    window.addEventListener("beforeunload", () => {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+        }
+    });
+})();
+</script>
+{% endblock %}

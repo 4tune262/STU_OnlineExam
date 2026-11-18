@@ -1,6 +1,7 @@
 
 {% extends "base.html" %} {% load static %} {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/exam_vscode.css' %}?v=20261001" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css" />
 <style>
   .proctor-video-wrapper { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 12px; background: #111827; }
   .proctor-video-wrapper .proctor-video { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
@@ -428,12 +429,19 @@
             <div class="answer-instruction code-instruction">
               <div>
                 <i class="bi bi-terminal"></i>
-                Viết chương trình C++ của bạn.
+                {% if question.language|default:"cpp" == "php" %}
+                  Viết chương trình PHP của bạn.
+                {% else %}
+                  Viết chương trình C++ của bạn.
+                {% endif %}
               </div>
 
               <span class="language-chip">
-                <i class="bi bi-c-circle"></i>
-                C++
+                {% if question.language|default:"cpp" == "php" %}
+                  <i class="bi bi-filetype-php"></i> PHP
+                {% else %}
+                  <i class="bi bi-c-circle"></i> C++
+                {% endif %}
               </span>
             </div>
 
@@ -447,13 +455,18 @@
                 </div>
 
                 <div class="vscode-tab">
-                  <i class="bi bi-filetype-cpp"></i>
-                  main.cpp
+                  {% if question.language|default:"cpp" == "php" %}
+                    <i class="bi bi-filetype-php"></i> main.php
+                  {% else %}
+                    <i class="bi bi-filetype-cpp"></i> main.cpp
+                  {% endif %}
                 </div>
 
                 <div class="vscode-titlebar-spacer"></div>
 
-                <span class="vscode-language"> C++ </span>
+                <span class="vscode-language">
+                  {{ question.language|default:"cpp"|upper }}
+                </span>
               </div>
 
               <!-- VSCode editor toolbar -->
@@ -465,7 +478,7 @@
 
                 <span>
                   <i class="bi bi-git"></i>
-                  main.cpp
+                  {% if question.language|default:"cpp" == "php" %}main.php{% else %}main.cpp{% endif %}
                 </span>
               </div>
 
@@ -485,6 +498,7 @@
                   autocorrect="off"
                   autocapitalize="off"
                   data-question="{{ question.index }}"
+                  data-language="{{ question.language|default:'cpp'|lower }}"
                 >
 {{ question.starter_code }}</textarea
                 >
@@ -499,7 +513,7 @@
 
                 <span> UTF-8 </span>
 
-                <span> C++ </span>
+                <span>{{ question.language|default:"cpp"|upper }}</span>
 
                 <span>
                   Ln <span id="cursor-line-{{ question.index }}">1</span>, Col
@@ -796,6 +810,9 @@
      ========================================================= -->
 
 <script src="{% static 'js/exam_interaction.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/php.min.js"></script>
 
 <script>
 
@@ -1880,83 +1897,77 @@
   function initCodeEditors() {
 
       document
-          .querySelectorAll(
-              ".vscode-code-input"
-          )
+          .querySelectorAll(".vscode-code-input")
           .forEach(function(editor) {
 
-              const index =
-                  editor.dataset.question;
+              const index = editor.dataset.question;
+              const editorBody = editor.closest(".vscode-editor-body");
 
-              updateLineNumbers(
-                  editor
-              );
+              // Lớp highlight chỉ phục vụ hiển thị; textarea gốc vẫn là nguồn dữ liệu.
+              if (editorBody && !editorBody.querySelector(".vscode-highlight-layer")) {
+                  const highlightLayer = document.createElement("pre");
+                  highlightLayer.className = "vscode-highlight-layer";
+                  highlightLayer.setAttribute("aria-hidden", "true");
+                  const highlightCode = document.createElement("code");
+                  const editorLanguage = (editor.dataset.language || "cpp").toLowerCase();
+                  highlightCode.className = `language-${editorLanguage} hljs`;
+                  highlightLayer.appendChild(highlightCode);
+                  editorBody.insertBefore(highlightLayer, editor);
+                  editor.dataset.highlightReady = "1";
+              }
 
-              editor.addEventListener(
-                  "input",
-                  function() {
+              updateLineNumbers(editor);
+              updateCodeHighlight(editor);
 
-                      updateLineNumbers(
-                          editor
-                      );
+              editor.addEventListener("input", function() {
+                  updateLineNumbers(editor);
+                  updateCodeHighlight(editor);
+                  updateCursorInfo(editor);
+                  updateProgress();
+                  scheduleDraftSave();
+              });
 
-                      updateCursorInfo(
-                          editor
-                      );
-
-                      updateProgress();
-
-                      scheduleDraftSave();
-
+              editor.addEventListener("scroll", function() {
+                  const gutter = document.getElementById(`line-numbers-${index}`);
+                  const highlightLayer = editor.parentElement.querySelector(".vscode-highlight-layer");
+                  if (gutter) gutter.scrollTop = editor.scrollTop;
+                  if (highlightLayer) {
+                      highlightLayer.scrollTop = editor.scrollTop;
+                      highlightLayer.scrollLeft = editor.scrollLeft;
                   }
-              );
+              });
 
+              editor.addEventListener("click", function() {
+                  updateCursorInfo(editor);
+              });
 
-              editor.addEventListener(
-                  "scroll",
-                  function() {
+              editor.addEventListener("keyup", function() {
+                  updateCursorInfo(editor);
+              });
 
-                      const gutter =
-                          document.getElementById(
-                              `line-numbers-${index}`
-                          );
-
-                      if (gutter) {
-
-                          gutter.scrollTop =
-                              editor.scrollTop;
-
-                      }
-
-                  }
-              );
-
-
-              editor.addEventListener(
-                  "click",
-                  function() {
-
-                      updateCursorInfo(
-                          editor
-                      );
-
-                  }
-              );
-
-
-              editor.addEventListener(
-                  "keyup",
-                  function() {
-
-                      updateCursorInfo(
-                          editor
-                      );
-
-                  }
-              );
-
+              editor.addEventListener("select", function() {
+                  updateCursorInfo(editor);
+              });
           });
+  }
 
+
+  function updateCodeHighlight(editor) {
+      if (!editor) return;
+      const code = editor.parentElement.querySelector(".vscode-highlight-layer code");
+      if (!code) return;
+
+      const source = editor.value || " ";
+      if (window.hljs) {
+          try {
+              const language = (editor.dataset.language || "cpp").toLowerCase();
+              code.innerHTML = window.hljs.highlight(source, { language: language, ignoreIllegals: true }).value;
+          } catch (error) {
+              code.textContent = source;
+          }
+      } else {
+          code.textContent = source;
+      }
   }
 
 

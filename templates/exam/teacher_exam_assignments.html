@@ -1,0 +1,669 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_block %}
+<link rel="stylesheet" href="{% static 'css/teacher_exam_assignments.css' %}">
+
+<div class="assignment-page">
+
+    <!-- PAGE HEADER -->
+    <header class="assignment-hero">
+        <div class="assignment-hero__topline">
+            <a href="{% url 'teacher_exam_papers' exam.id %}" class="assignment-backlink">
+                <i class="bi bi-arrow-left"></i>
+                <span>Quản lý phiên bản đề</span>
+            </a>
+            <span class="assignment-context-tag">
+                <i class="bi bi-diagram-3"></i>
+                Quản lý phân công
+            </span>
+        </div>
+
+        <div class="assignment-hero__content">
+            <div>
+                <div class="assignment-eyebrow">TỔ CHỨC BÀI THI</div>
+                <h1 class="assignment-title">Phân công phiên bản đề thi</h1>
+                <p class="assignment-subtitle">
+                    Chọn mã đề cho từng sinh viên hoặc phân phối tự động để chia đều các phiên bản đề.
+                </p>
+
+                <div class="assignment-meta">
+                    <span class="assignment-meta__item">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <strong>{{ exam.title }}</strong>
+                    </span>
+                    {% if exam.offering %}
+                    <span class="assignment-meta__separator"></span>
+                    <span class="assignment-meta__item">
+                        <i class="bi bi-people"></i>
+                        {{ exam.offering }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="assignment-hero__symbol" aria-hidden="true">
+                <i class="bi bi-clipboard2-check"></i>
+            </div>
+        </div>
+    </header>
+
+    <!-- OVERVIEW -->
+    <section class="assignment-overview" aria-label="Tổng quan phân công">
+        <div class="assignment-section-heading">
+            <div>
+                <span class="assignment-section-kicker">TỔNG QUAN</span>
+                <h2>Tình trạng phân công</h2>
+            </div>
+            <span class="assignment-live-label">
+                <span class="assignment-live-dot"></span>
+                Dữ liệu hiện tại
+            </span>
+        </div>
+
+        <div class="assignment-stat-grid">
+            <article class="assignment-stat-card assignment-stat-card--blue">
+                <div class="assignment-stat-card__icon">
+                    <i class="bi bi-mortarboard"></i>
+                </div>
+                <div class="assignment-stat-card__body">
+                    <span class="assignment-stat-card__label">Sinh viên ghi danh</span>
+                    <strong class="assignment-stat-card__value">{{ student_count }}</strong>
+                    <span class="assignment-stat-card__note">Tổng số sinh viên trong lớp học phần</span>
+                </div>
+            </article>
+
+            <article class="assignment-stat-card assignment-stat-card--green">
+                <div class="assignment-stat-card__icon">
+                    <i class="bi bi-check2-circle"></i>
+                </div>
+                <div class="assignment-stat-card__body">
+                    <span class="assignment-stat-card__label">Đã được phân công</span>
+                    <strong class="assignment-stat-card__value">{{ assignment_count }}</strong>
+                    <span class="assignment-stat-card__note">Sinh viên đã có phiên bản đề</span>
+                </div>
+            </article>
+
+            <article class="assignment-stat-card assignment-stat-card--amber">
+                <div class="assignment-stat-card__icon">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div class="assignment-stat-card__body">
+                    <span class="assignment-stat-card__label">Chưa được phân công</span>
+                    <strong class="assignment-stat-card__value">{{ unassigned_count }}</strong>
+                    <span class="assignment-stat-card__note">Sinh viên đang chờ nhận mã đề</span>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <!-- ASSIGNMENT METHODS -->
+    <section class="assignment-methods" aria-label="Phương thức phân công">
+        <div class="assignment-section-heading">
+            <div>
+                <span class="assignment-section-kicker">THAO TÁC</span>
+                <h2>Chọn cách phân công</h2>
+                <p class="assignment-section-description">
+                    Có thể chỉ định mã đề cho từng sinh viên hoặc để hệ thống phân phối ngẫu nhiên.
+                </p>
+            </div>
+        </div>
+
+        <div class="assignment-method-grid">
+
+            <!-- MANUAL ASSIGNMENT -->
+            <article class="assignment-panel assignment-panel--manual">
+                <div class="assignment-panel__header">
+                    <div class="assignment-panel__identity">
+                        <div class="assignment-method-icon assignment-method-icon--blue">
+                            <i class="bi bi-person-check"></i>
+                        </div>
+                        <div>
+                            <span class="assignment-panel__step">PHƯƠNG THỨC 01</span>
+                            <h3>Phân công thủ công</h3>
+                        </div>
+                    </div>
+                    <span class="assignment-method-pill assignment-method-pill--blue">Chỉ định từng người</span>
+                </div>
+
+                <p class="assignment-panel__description">
+                    Phù hợp khi cần chọn chính xác sinh viên và phiên bản đề tương ứng.
+                </p>
+
+                <form method="POST" class="assignment-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="manual">
+
+                    <div class="assignment-field">
+                        <label for="manualStudent" class="assignment-field__label">
+                            <span>Sinh viên</span>
+                            <span class="assignment-required">Bắt buộc</span>
+                        </label>
+                        <div class="assignment-select-wrap">
+                            <i class="bi bi-person assignment-select-icon"></i>
+                            <select name="student_id" id="manualStudent" class="assignment-select" required
+                                {% if not unassigned_count or not papers %}disabled{% endif %}>
+                                <option value="">-- Chọn sinh viên chưa được phân công --</option>
+                                {% for row in student_rows %}
+                                    {% if not row.assignment %}
+                                    <option value="{{ row.student.id }}">
+                                        {{ row.student.user.get_full_name|default:row.student.user.username }}
+                                        {% if row.student.student_id %} - {{ row.student.student_id }}{% endif %}
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <i class="bi bi-chevron-down assignment-select-chevron"></i>
+                        </div>
+                        <span class="assignment-field__hint">
+                            Chỉ hiển thị sinh viên chưa có phiên bản đề.
+                        </span>
+                    </div>
+
+                    <div class="assignment-field">
+                        <label for="manualPaper" class="assignment-field__label">
+                            <span>Phiên bản đề</span>
+                            <span class="assignment-required">Bắt buộc</span>
+                        </label>
+                        <div class="assignment-select-wrap">
+                            <i class="bi bi-file-earmark-text assignment-select-icon"></i>
+                            <select name="paper_id" id="manualPaper" class="assignment-select" required
+                                {% if not papers or not unassigned_count %}disabled{% endif %}>
+                                <option value="">-- Chọn mã đề --</option>
+                                {% for paper in papers %}
+                                <option value="{{ paper.id }}">
+                                    Đề {{ paper.paper_number }} - {{ paper.paper_code }}{% if paper.title %} ({{ paper.title }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <i class="bi bi-chevron-down assignment-select-chevron"></i>
+                        </div>
+                        <span class="assignment-field__hint">
+                            Chọn một phiên bản đề đang có trong danh sách.
+                        </span>
+                    </div>
+
+                    {% if not unassigned_count %}
+                    <div class="assignment-inline-notice assignment-inline-notice--success">
+                        <i class="bi bi-check-circle"></i>
+                        Tất cả sinh viên đã được phân công phiên bản đề.
+                    </div>
+                    {% elif not papers %}
+                    <div class="assignment-inline-notice assignment-inline-notice--warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Chưa có phiên bản đề để thực hiện phân công.
+                    </div>
+                    {% endif %}
+
+                    <div class="assignment-panel__footer">
+                        <span class="assignment-panel__footnote">
+                            <i class="bi bi-info-circle"></i>
+                            Mỗi lần chỉ phân công cho một sinh viên.
+                        </span>
+                        <button type="submit" class="assignment-button assignment-button--primary"
+                            {% if not unassigned_count or not papers %}disabled{% endif %}>
+                            <i class="bi bi-check2"></i>
+                            Phân công đề
+                        </button>
+                    </div>
+                </form>
+            </article>
+
+            <!-- RANDOM ASSIGNMENT -->
+            <article class="assignment-panel assignment-panel--random">
+                <div class="assignment-panel__header">
+                    <div class="assignment-panel__identity">
+                        <div class="assignment-method-icon assignment-method-icon--green">
+                            <i class="bi bi-shuffle"></i>
+                        </div>
+                        <div>
+                            <span class="assignment-panel__step">PHƯƠNG THỨC 02</span>
+                            <h3>Phân công ngẫu nhiên</h3>
+                        </div>
+                    </div>
+                    <span class="assignment-method-pill assignment-method-pill--green">Tự động phân phối</span>
+                </div>
+
+                <p class="assignment-panel__description">
+                    Hệ thống tự chia các mã đề đã chọn cho sinh viên chưa được phân công.
+                </p>
+
+                <form method="POST" class="assignment-form" id="randomAssignmentForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="random">
+
+                    <div class="assignment-random-explainer">
+                        <div class="assignment-random-explainer__icon">
+                            <i class="bi bi-lightbulb"></i>
+                        </div>
+                        <p>
+                            Số lượng sinh viên giữa các mã đề được chia đều,
+                            <strong>chênh lệch tối đa 1 sinh viên</strong>.
+                        </p>
+                    </div>
+
+                    <div class="assignment-paper-heading">
+                        <div>
+                            <label class="assignment-field__label">Chọn phiên bản đề đưa vào phân phối</label>
+                            <span class="assignment-field__hint">Các phiên bản đang được chọn mặc định.</span>
+                        </div>
+                        <div class="assignment-selection-tools">
+                            <button type="button" class="assignment-text-button" id="selectAllPapers">Chọn tất cả</button>
+                            <span></span>
+                            <button type="button" class="assignment-text-button" id="clearAllPapers">Bỏ chọn</button>
+                        </div>
+                    </div>
+
+                    <div class="assignment-paper-grid" id="randomPaperList">
+                        {% for paper in papers %}
+                        <label class="assignment-paper-option" for="paper_{{ paper.id }}">
+                            <input
+                                class="assignment-paper-checkbox"
+                                type="checkbox"
+                                name="paper_ids"
+                                value="{{ paper.id }}"
+                                id="paper_{{ paper.id }}"
+                                checked
+                            >
+                            <span class="assignment-paper-option__check">
+                                <i class="bi bi-check"></i>
+                            </span>
+                            <span class="assignment-paper-option__content">
+                                <span class="assignment-paper-option__code">{{ paper.paper_code }}</span>
+                                <span class="assignment-paper-option__meta">
+                                    Phiên bản {{ paper.paper_number }}
+                                    {% if paper.title %}<span class="assignment-paper-option__title">{{ paper.title }}</span>{% endif %}
+                                </span>
+                            </span>
+                            <i class="bi bi-file-earmark-text assignment-paper-option__icon"></i>
+                        </label>
+                        {% empty %}
+                        <div class="assignment-empty-papers">
+                            <i class="bi bi-folder2-open"></i>
+                            <strong>Chưa có phiên bản đề</strong>
+                            <span>Hãy tạo phiên bản đề trước khi phân công ngẫu nhiên.</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="assignment-selected-summary">
+                        <span>
+                            <i class="bi bi-check2-square"></i>
+                            Đang chọn <strong id="selectedPaperCount">{{ papers|length }}</strong> phiên bản
+                        </span>
+                        <span class="assignment-selected-summary__students">
+                            <i class="bi bi-people"></i>
+                            {{ unassigned_count }} sinh viên chờ phân công
+                        </span>
+                    </div>
+
+                    {% if not unassigned_count %}
+                    <div class="assignment-inline-notice assignment-inline-notice--success">
+                        <i class="bi bi-check-circle"></i>
+                        Không còn sinh viên nào đang chờ phân công.
+                    </div>
+                    {% endif %}
+
+                    <div class="assignment-panel__footer">
+                        <span class="assignment-panel__footnote">
+                            <i class="bi bi-shield-check"></i>
+                            Chỉ áp dụng cho sinh viên chưa được phân công.
+                        </span>
+                        <button type="submit" class="assignment-button assignment-button--success"
+                            id="randomAssignButton"
+                            {% if not papers or not unassigned_count %}disabled{% endif %}
+                            onclick="return confirm('Bạn có chắc chắn muốn phân công ngẫu nhiên cho các sinh viên chưa được phân công?');">
+                            <i class="bi bi-shuffle"></i>
+                            Phân công ngẫu nhiên
+                        </button>
+                    </div>
+                    <div class="assignment-validation-message" id="randomSelectionMessage" role="status" aria-live="polite"></div>
+                </form>
+            </article>
+        </div>
+    </section>
+
+    <!-- STUDENT ASSIGNMENT LIST -->
+    <section class="assignment-data-section">
+        <div class="assignment-section-heading assignment-section-heading--table">
+            <div>
+                <span class="assignment-section-kicker">THEO DÕI</span>
+                <h2>Danh sách sinh viên và mã đề</h2>
+                <p class="assignment-section-description">
+                    Kiểm tra sinh viên đã nhận mã đề nào và phát hiện các trường hợp chưa được phân công.
+                </p>
+            </div>
+            <div class="assignment-table-count">
+                <i class="bi bi-people"></i>
+                {{ student_count }} sinh viên
+            </div>
+        </div>
+
+        <div class="assignment-table-card">
+            <div class="assignment-table-toolbar">
+                <div class="assignment-search">
+                    <i class="bi bi-search"></i>
+                    <input type="search" id="assignmentSearch"
+                        placeholder="Tìm theo mã sinh viên, họ tên hoặc tài khoản..."
+                        aria-label="Tìm kiếm sinh viên">
+                    <kbd>⌕</kbd>
+                </div>
+                <div class="assignment-filter">
+                    <label for="assignmentStatusFilter">Trạng thái</label>
+                    <select id="assignmentStatusFilter" aria-label="Lọc theo trạng thái phân công">
+                        <option value="all">Tất cả sinh viên</option>
+                        <option value="assigned">Đã phân công</option>
+                        <option value="unassigned">Chưa phân công</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="assignment-table-scroll">
+                <table class="assignment-table" id="studentAssignmentTable">
+                    <thead>
+                        <tr>
+                            <th class="assignment-col-number">STT</th>
+                            <th>Mã sinh viên</th>
+                            <th>Họ và tên</th>
+                            <th>Tên đăng nhập</th>
+                            <th class="assignment-col-center">Mã đề</th>
+                            <th class="assignment-col-center">Phương thức</th>
+                            <th class="assignment-col-center">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in student_rows %}
+                        <tr data-student-row data-assignment-status="{% if row.assignment %}assigned{% else %}unassigned{% endif %}">
+                            <td class="assignment-cell-number">{{ forloop.counter }}</td>
+                            <td>
+                                <span class="assignment-student-code">{{ row.student.student_id|default:"-" }}</span>
+                            </td>
+                            <td>
+                                <span class="assignment-student-name">{{ row.student.user.get_full_name|default:"-" }}</span>
+                            </td>
+                            <td>
+                                <span class="assignment-username">{{ row.student.user.username }}</span>
+                            </td>
+                            <td class="assignment-col-center">
+                                {% if row.assignment %}
+                                <span class="assignment-paper-code">{{ row.assignment.paper.paper_code }}</span>
+                                {% else %}
+                                <span class="assignment-muted-value">Chưa phân công</span>
+                                {% endif %}
+                            </td>
+                            <td class="assignment-col-center">
+                                {% if row.assignment %}
+                                    {% if row.assignment.assignment_method == "random" %}
+                                    <span class="assignment-method-badge assignment-method-badge--random">
+                                        <i class="bi bi-shuffle"></i> Ngẫu nhiên
+                                    </span>
+                                    {% else %}
+                                    <span class="assignment-method-badge assignment-method-badge--manual">
+                                        <i class="bi bi-person-check"></i> Thủ công
+                                    </span>
+                                    {% endif %}
+                                {% else %}
+                                <span class="assignment-muted-value">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="assignment-col-center">
+                                {% if row.assignment %}
+                                <span class="assignment-status-badge assignment-status-badge--done">
+                                    <span></span> Đã phân công
+                                </span>
+                                {% else %}
+                                <span class="assignment-status-badge assignment-status-badge--waiting">
+                                    <span></span> Chưa phân công
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="assignment-table-empty">
+                                    <i class="bi bi-person-x"></i>
+                                    <strong>Chưa có sinh viên ghi danh</strong>
+                                    <span>Danh sách sinh viên sẽ xuất hiện khi có người ghi danh vào lớp học phần.</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr id="assignmentNoSearchResult" class="assignment-no-search-result" hidden>
+                            <td colspan="7">
+                                <div class="assignment-table-empty">
+                                    <i class="bi bi-search"></i>
+                                    <strong>Không tìm thấy sinh viên phù hợp</strong>
+                                    <span>Thử thay đổi từ khóa hoặc bộ lọc trạng thái.</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="assignment-table-footer">
+                <span id="assignmentVisibleCount">Hiển thị danh sách sinh viên</span>
+                <span><i class="bi bi-info-circle"></i> Danh sách được cập nhật theo dữ liệu hiện tại.</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ASSIGNMENT HISTORY -->
+    <section class="assignment-data-section assignment-history-section">
+        <div class="assignment-section-heading assignment-section-heading--table">
+            <div>
+                <span class="assignment-section-kicker">NHẬT KÝ HOẠT ĐỘNG</span>
+                <h2>Lịch sử phân công</h2>
+                <p class="assignment-section-description">
+                    Theo dõi người thực hiện, thời điểm và phương thức phân công. Có thể sửa hoặc hủy phân công tại đây.
+                </p>
+            </div>
+            <div class="assignment-table-count">
+                <i class="bi bi-clock-history"></i>
+                {{ assignments|length }} lượt phân công
+            </div>
+        </div>
+
+        <div class="assignment-table-card">
+            <div class="assignment-table-scroll">
+                <table class="assignment-table assignment-history-table">
+                    <thead>
+                        <tr>
+                            <th>Thời gian</th>
+                            <th>Sinh viên</th>
+                            <th>Mã đề</th>
+                            <th>Người phân công</th>
+                            <th>Phương thức</th>
+                            <th class="assignment-col-center">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment in assignments %}
+                        <tr>
+                            <td>
+                                <span class="assignment-history-date">
+                                    <i class="bi bi-calendar3"></i>
+                                    {{ assignment.assigned_at|date:"d/m/Y H:i" }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="assignment-student-name">
+                                    {{ assignment.student.user.get_full_name|default:assignment.student.user.username }}
+                                </span>
+                                <span class="assignment-history-username">{{ assignment.student.user.username }}</span>
+                            </td>
+                            <td>
+                                <span class="assignment-paper-code">{{ assignment.paper.paper_code }}</span>
+                            </td>
+                            <td>
+                                {% if assignment.assigned_by %}
+                                    {{ assignment.assigned_by.user.get_full_name|default:assignment.assigned_by.user.username }}
+                                {% else %}
+                                    <span class="assignment-system-user"><i class="bi bi-cpu"></i> Hệ thống</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if assignment.assignment_method == "random" %}
+                                <span class="assignment-method-badge assignment-method-badge--random">
+                                    <i class="bi bi-shuffle"></i> {{ assignment.get_assignment_method_display }}
+                                </span>
+                                {% else %}
+                                <span class="assignment-method-badge assignment-method-badge--manual">
+                                    <i class="bi bi-person-check"></i> {{ assignment.get_assignment_method_display }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="assignment-col-center">
+                                <div class="assignment-row-actions">
+                                    <a href="{% url 'teacher_edit_exam_assignment' exam.id assignment.id %}"
+                                        class="assignment-icon-button assignment-icon-button--edit"
+                                        title="Thay đổi mã đề được phân công"
+                                        aria-label="Sửa phân công">
+                                        <i class="bi bi-pencil-square"></i>
+                                        <span>Sửa</span>
+                                    </a>
+                                    <form method="POST"
+                                        action="{% url 'teacher_delete_exam_assignment' exam.id assignment.id %}"
+                                        onsubmit="return confirm('Bạn có chắc chắn muốn hủy phân công đề của sinh viên này?');">
+                                        {% csrf_token %}
+                                        <button type="submit"
+                                            class="assignment-icon-button assignment-icon-button--delete"
+                                            title="Hủy phân công"
+                                            aria-label="Hủy phân công">
+                                            <i class="bi bi-trash3"></i>
+                                            <span>Hủy</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="assignment-table-empty">
+                                    <i class="bi bi-clock"></i>
+                                    <strong>Chưa có lịch sử phân công</strong>
+                                    <span>Các thao tác phân công sẽ được ghi nhận tại đây.</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER NAVIGATION -->
+    <footer class="assignment-page-footer">
+        <a href="{% url 'teacher_exam_papers' exam.id %}" class="assignment-footer-link">
+            <i class="bi bi-arrow-left"></i>
+            <span>Quay lại quản lý phiên bản đề</span>
+        </a>
+        <span class="assignment-footer-note">
+            <i class="bi bi-lock"></i>
+            Thao tác phân công được quản lý theo quy định của bài thi.
+        </span>
+    </footer>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Chọn tất cả / bỏ chọn các phiên bản đề khi phân công ngẫu nhiên.
+    const paperCheckboxes = Array.from(
+        document.querySelectorAll("#randomPaperList input[name='paper_ids']")
+    );
+    const selectedPaperCount = document.getElementById("selectedPaperCount");
+    const selectAllPapers = document.getElementById("selectAllPapers");
+    const clearAllPapers = document.getElementById("clearAllPapers");
+    const randomAssignButton = document.getElementById("randomAssignButton");
+    const randomSelectionMessage = document.getElementById("randomSelectionMessage");
+
+    function updatePaperSelection() {
+        const selectedCount = paperCheckboxes.filter((checkbox) => checkbox.checked).length;
+
+        if (selectedPaperCount) {
+            selectedPaperCount.textContent = selectedCount;
+        }
+
+        if (randomAssignButton) {
+            randomAssignButton.disabled = selectedCount === 0 || paperCheckboxes.length === 0
+                || randomAssignButton.dataset.noStudents === "true";
+        }
+
+        if (randomSelectionMessage) {
+            randomSelectionMessage.textContent = selectedCount === 0
+                ? "Vui lòng chọn ít nhất một phiên bản đề để tiếp tục."
+                : "";
+        }
+    }
+
+    if (randomAssignButton && randomAssignButton.disabled) {
+        randomAssignButton.dataset.noStudents =
+            {{ unassigned_count|yesno:"false,true" }};
+    }
+
+    paperCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", updatePaperSelection);
+    });
+
+    if (selectAllPapers) {
+        selectAllPapers.addEventListener("click", function () {
+            paperCheckboxes.forEach((checkbox) => { checkbox.checked = true; });
+            updatePaperSelection();
+        });
+    }
+
+    if (clearAllPapers) {
+        clearAllPapers.addEventListener("click", function () {
+            paperCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
+            updatePaperSelection();
+        });
+    }
+
+    updatePaperSelection();
+
+    // Tìm kiếm và lọc danh sách sinh viên ngay tại trang, không gửi request.
+    const searchInput = document.getElementById("assignmentSearch");
+    const statusFilter = document.getElementById("assignmentStatusFilter");
+    const studentRows = Array.from(document.querySelectorAll("[data-student-row]"));
+    const noSearchResult = document.getElementById("assignmentNoSearchResult");
+    const visibleCount = document.getElementById("assignmentVisibleCount");
+
+    function filterStudentRows() {
+        const keyword = (searchInput ? searchInput.value : "").trim().toLocaleLowerCase("vi");
+        const status = statusFilter ? statusFilter.value : "all";
+        let visible = 0;
+
+        studentRows.forEach((row) => {
+            const rowText = row.textContent.toLocaleLowerCase("vi");
+            const rowStatus = row.dataset.assignmentStatus;
+            const matchesKeyword = !keyword || rowText.includes(keyword);
+            const matchesStatus = status === "all" || rowStatus === status;
+            const shouldShow = matchesKeyword && matchesStatus;
+
+            row.hidden = !shouldShow;
+            if (shouldShow) visible += 1;
+        });
+
+        if (noSearchResult) {
+            noSearchResult.hidden = visible !== 0 || studentRows.length === 0;
+        }
+
+        if (visibleCount) {
+            visibleCount.textContent = `Đang hiển thị ${visible} / ${studentRows.length} sinh viên`;
+        }
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener("input", filterStudentRows);
+    }
+
+    if (statusFilter) {
+        statusFilter.addEventListener("change", filterStudentRows);
+    }
+
+    filterStudentRows();
+});
+</script>
+{% endblock %}

@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ title|default:"STU Online Examination" }}</title>
-    <link rel="icon" type="image/png" href="{% static 'images/logo.png' %}" />
+    <link rel="icon" type="image/png" href="{% static 'images/stu_exam_logo_dark_mode.png' %}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -28,9 +28,15 @@
     <link rel="stylesheet" href="{% static 'css/style.css' %}" />
     <link rel="stylesheet" href="{% static 'css/home.css' %}" />
     <link rel="stylesheet" href="{% static 'css/exam.css' %}" />
+    <link rel="stylesheet" href="{% static 'css/footer.css' %}" />
+    <link rel="stylesheet" href="{% static 'css/sidebar-hamster.css' %}" />
+    <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}" />
     {% block extra_head %}{% endblock %}
   </head>
   <body>
+    <!-- Bộ lọc kính liquid dùng chung -->
+    {% include "includes/liquid-filter.html" %}
+
     <!-- Thanh điều hướng phía trên -->
     {% include "includes/navbar.html" %}
 

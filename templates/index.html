@@ -1,77 +1,206 @@
-{% extends "base.html" %} {% load static %} {% block body_block %}
-<main class="home-dashboard">
-  <section class="welcome-strip">
-    <div class="welcome-brand">
-      <img src="{% static 'images/logo.png' %}" alt="STU" />
-      <div>
-        <p class="eyebrow">SAIGON TECHNOLOGY UNIVERSITY</p>
-        {% if profile %}
-        <h1>
-          Xin chào,
-          {{ request.user.first_name|default:request.user.username }}
-        </h1>
-        {% endif %} {% if not profile %}
-        <h1>STU Online Examination</h1>
-        {% endif %}
-<!--        <p class="welcome-copy">-->
-<!--          {% if profile %} {{ profile.get_role_display }} · {{-->
-<!--          profile.get_faculty_display|default:"Hệ thống khảo thí" }}-->
-<!--          {% endif %}-->
-<!--          {% if not profile %} Cổng học tập và khảo thí trực tuyến {% endif %}-->
-<!--        </p>-->
-        <p class="welcome-copy">
-  {% if profile %}
-    {{ profile.get_role_display }}
-    ·
-    {{ profile.get_faculty_display|default:"Hệ thống khảo thí" }}
-  {% else %}
-    Cổng học tập và khảo thí trực tuyến
-  {% endif %}
-</p>
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/home-modern.css' %}" />
+<script>document.documentElement.classList.add("hx-js");</script>
+<script src="{% static 'js/home-modern.js' %}" defer></script>
+{% endblock %}
+
+{% block body_block %}
+<main class="hx-home">
+
+  {% if not profile %}
+  <!-- ===================== KHÁCH: HERO ===================== -->
+  <section class="hx-hero">
+    <span class="hx-blob hx-blob-1" aria-hidden="true"></span>
+    <span class="hx-blob hx-blob-2" aria-hidden="true"></span>
+
+    <div class="hx-hero-copy">
+      <p class="hx-eyebrow hx-in" style="--i:0">
+        <img src="{% static 'images/stu_exam_logo_dark_mode.png' %}" alt="" />
+        Saigon Technology University
+      </p>
+      <h1 class="hx-title hx-in" style="--i:1">
+        Nền tảng thi trực tuyến thông minh – Kết nối tri thức, kiến tạo tương lai
+      </h1>
+      <p class="hx-lead hx-in" style="--i:2">
+        STU_OnlineExam mang đến trải nghiệm kiểm tra và đánh giá trực tuyến hiện đại,
+        an toàn và minh bạch dành cho giảng viên và sinh viên Trường Đại học Công nghệ Sài Gòn.
+      </p>
+      <div class="hx-actions hx-in" style="--i:3">
+        <a class="hx-btn hx-btn-primary" href="{% url 'qr_login_page' %}">
+          <i class="bi bi-qr-code-scan"></i> Đăng nhập
+        </a>
+        <a class="hx-btn hx-btn-ghost" href="#hx-features">
+          <i class="bi bi-compass"></i> Khám phá hệ thống
+        </a>
       </div>
     </div>
-    {% if not profile %}
-    <a class="btn btn-primary" href="{% url 'qr_login_page' %}">
-      <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
-    </a>
-    {% endif %} {% if profile %}
-    <a class="btn btn-primary" href="{% url 'course_list' %}">
-      <i class="bi bi-journal-bookmark"></i> Khóa học của tôi
-    </a>
-    {% endif %}
+
+    <div class="hx-hero-art hx-in" style="--i:2" aria-hidden="true">
+      <svg viewBox="0 0 420 360" class="hx-illus" role="img">
+        <defs>
+          <linearGradient id="hxg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0056CC" />
+            <stop offset="1" stop-color="#003D99" />
+          </linearGradient>
+        </defs>
+        <circle cx="210" cy="180" r="150" fill="#38BDF8" opacity=".14" />
+        <rect x="110" y="40" width="200" height="270" rx="22" fill="#fff" stroke="#D6E4FF" stroke-width="2" />
+        <rect x="110" y="40" width="200" height="56" rx="22" fill="url(#hxg)" />
+        <rect x="110" y="74" width="200" height="22" fill="url(#hxg)" />
+        <rect x="132" y="58" width="80" height="10" rx="5" fill="#fff" opacity=".9" />
+        <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M134 130l8 8 14-16" />
+          <path d="M134 178l8 8 14-16" />
+          <path d="M134 226l8 8 14-16" />
+        </g>
+        <g fill="#D6E4FF">
+          <rect x="170" y="126" width="110" height="9" rx="4.5" />
+          <rect x="170" y="174" width="90" height="9" rx="4.5" />
+          <rect x="170" y="222" width="100" height="9" rx="4.5" />
+        </g>
+        <rect x="132" y="264" width="156" height="30" rx="15" fill="url(#hxg)" />
+        <rect x="172" y="275" width="76" height="8" rx="4" fill="#fff" opacity=".9" />
+      </svg>
+      <span class="hx-chip hx-chip-a"><i class="bi bi-shield-check"></i> An toàn</span>
+      <span class="hx-chip hx-chip-b"><i class="bi bi-graph-up-arrow"></i> Kết quả</span>
+      <span class="hx-chip hx-chip-c"><i class="bi bi-person-check"></i> Điểm danh</span>
+    </div>
   </section>
 
+  <!-- ===================== KHÁCH: TÍNH NĂNG ===================== -->
+  <section class="hx-section" id="hx-features">
+    <div class="hx-head hx-reveal">
+      <h2>Mọi thứ cho một kỳ thi trực tuyến</h2>
+      <p>Các chức năng đang có trên hệ thống, dành cho sinh viên, giảng viên và quản trị viên.</p>
+    </div>
+    <div class="hx-grid">
+      <article class="hx-card hx-reveal" style="--i:0">
+        <span class="hx-ico"><i class="bi bi-pencil-square"></i></span>
+        <h3>Tổ chức và quản lý bài thi</h3>
+        <p>Giảng viên tạo, cấu hình và theo dõi các bài thi của lớp mình phụ trách.</p>
+      </article>
+      <article class="hx-card hx-reveal" style="--i:1">
+        <span class="hx-ico"><i class="bi bi-journal-bookmark"></i></span>
+        <h3>Khóa học và lớp phụ trách</h3>
+        <p>Xem các khóa học được phân công hoặc ghi danh cùng bài thi liên quan.</p>
+      </article>
+      <article class="hx-card hx-reveal" style="--i:2">
+        <span class="hx-ico"><i class="bi bi-laptop"></i></span>
+        <h3>Làm bài thi trực tuyến</h3>
+        <p>Sinh viên vào bài thi được phân công ngay trên trình duyệt, đúng khung giờ.</p>
+      </article>
+      <article class="hx-card hx-reveal" style="--i:3">
+        <span class="hx-ico"><i class="bi bi-graph-up-arrow"></i></span>
+        <h3>Điểm và kết quả</h3>
+        <p>Sinh viên xem kết quả của mình, giảng viên xem báo cáo kết quả của lớp.</p>
+      </article>
+      <article class="hx-card hx-reveal" style="--i:4">
+        <span class="hx-ico"><i class="bi bi-person-check"></i></span>
+        <h3>Điểm danh khuôn mặt</h3>
+        <p>Giảng viên và quản trị viên điểm danh bằng nhận diện khuôn mặt.</p>
+      </article>
+      <article class="hx-card hx-reveal" style="--i:5">
+        <span class="hx-ico"><i class="bi bi-qr-code-scan"></i></span>
+        <h3>Đăng nhập bằng QR</h3>
+        <p>Đăng nhập nhanh bằng mã QR, quyền truy cập được cấp theo vai trò.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== KHÁCH: QUY TRÌNH ===================== -->
+  <section class="hx-section hx-section-alt">
+    <div class="hx-head hx-reveal">
+      <h2>Quy trình sử dụng</h2>
+      <p>Bốn bước từ đăng nhập đến xem kết quả.</p>
+    </div>
+    <ol class="hx-steps">
+      <li class="hx-step hx-reveal" style="--i:0"><span class="hx-num">1</span><h3>Đăng nhập hệ thống</h3><p>Dùng mã QR để vào tài khoản của bạn.</p></li>
+      <li class="hx-step hx-reveal" style="--i:1"><span class="hx-num">2</span><h3>Truy cập bài thi</h3><p>Mở bài thi được phân công cho bạn.</p></li>
+      <li class="hx-step hx-reveal" style="--i:2"><span class="hx-num">3</span><h3>Thực hiện bài thi</h3><p>Làm bài trong thời gian quy định.</p></li>
+      <li class="hx-step hx-reveal" style="--i:3"><span class="hx-num">4</span><h3>Nộp bài, xem kết quả</h3><p>Kết quả hiển thị theo quyền được cấp.</p></li>
+    </ol>
+  </section>
+
+  <!-- ===================== KHÁCH: CTA CUỐI ===================== -->
+  <section class="hx-cta hx-reveal">
+    <i class="bi bi-mortarboard"></i>
+    <div>
+      <h2>Không gian học tập và khảo thí STU</h2>
+      <p>Đăng nhập để xem khóa học, lịch thi, hồ sơ và kết quả theo vai trò của bạn.</p>
+    </div>
+    <a class="hx-btn hx-btn-light" href="{% url 'qr_login_page' %}">
+      <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
+    </a>
+  </section>
+  {% endif %}
+
   {% if profile %}
-  <section class="dashboard-metrics" aria-label="Tổng quan">
-    <div class="metric">
-      <span class="metric-icon metric-blue"><i class="bi bi-book"></i></span>
+  <!-- ===================== ĐÃ ĐĂNG NHẬP: HERO THU GỌN ===================== -->
+  <section class="hx-hero hx-hero-compact">
+    <span class="hx-blob hx-blob-1" aria-hidden="true"></span>
+    <span class="hx-blob hx-blob-2" aria-hidden="true"></span>
+    <div class="hx-hero-copy">
+      <p class="hx-eyebrow hx-in" style="--i:0">
+        <img src="{% static 'images/stu_exam_logo_dark_mode.png' %}" alt="" />
+        Saigon Technology University
+      </p>
+      <h1 class="hx-title hx-in" style="--i:1">
+        Xin chào, {{ request.user.first_name|default:request.user.username }}
+      </h1>
+      <p class="hx-lead hx-in" style="--i:2">
+        {{ profile.get_role_display }} · {{ profile.get_faculty_display|default:"Hệ thống khảo thí" }}
+      </p>
+      <div class="hx-actions hx-in" style="--i:3">
+        <a class="btn-wrapper" href="{% url 'course_list' %}">
+          <div class="light"></div>
+          <div class="gradient-layer" style="animation-delay: 0s; animation-duration: 25s;"></div>
+          <div class="gradient-layer" style="animation-delay: 0.15s; animation-duration: 15.9s;"></div>
+          <div class="gradient-layer" style="animation-delay: 0.53s; animation-duration: 26.4s;"></div>
+          <div class="gradient-layer" style="animation-delay: 0.45s; animation-duration: 17.8s;"></div>
+          <div class="gradient-layer" style="animation-delay: 1.6s; animation-duration: 19.2s;"></div>
+          <div class="gradient-layer" style="animation-delay: 1.6s; animation-duration: 29.2s;"></div>
+          <div class="gradient-layer" style="animation-delay: 1.6s; animation-duration: 20.2s;"></div>
+          <span class="gradient-btn"><i class="bi bi-journal-bookmark"></i> Khóa học của tôi</span>
+          <div class="text-overlay" aria-hidden="true"><i class="bi bi-journal-bookmark"></i> Khóa học của tôi</div>
+        </a>
+      </div>
+    </div>
+    <div class="hx-hero-art hx-in" style="--i:2" aria-hidden="true">
+      <span class="hx-bigico"><i class="bi bi-mortarboard-fill"></i></span>
+    </div>
+  </section>
+
+  <!-- ===================== THỐNG KÊ (DỮ LIỆU THẬT) ===================== -->
+  <section class="hx-metrics" aria-label="Tổng quan">
+    <div class="hx-metric hx-reveal" style="--i:0">
+      <span class="hx-ico"><i class="bi bi-book"></i></span>
       <div>
-        <strong>{{ dashboard_courses.count }}</strong>
+        <strong data-count="{{ dashboard_courses.count }}">{{ dashboard_courses.count }}</strong>
         <span>Khóa học</span>
       </div>
     </div>
-    <div class="metric">
-      <span class="metric-icon metric-coral"
-        ><i class="bi bi-calendar2-check"></i
-      ></span>
+    <div class="hx-metric hx-reveal" style="--i:1">
+      <span class="hx-ico"><i class="bi bi-calendar2-check"></i></span>
       <div>
-        <strong>{{ upcoming_exams.count }}</strong>
+        <strong data-count="{{ upcoming_exams.count }}">{{ upcoming_exams.count }}</strong>
         <span>Bài thi sắp tới</span>
       </div>
     </div>
     {% if profile.role == "student" %}
-    <div class="metric">
-      <span class="metric-icon metric-green"><i class="bi bi-award"></i></span>
+    <div class="hx-metric hx-reveal" style="--i:2">
+      <span class="hx-ico"><i class="bi bi-award"></i></span>
       <div>
-        <strong>{{ completed_exam_count }}</strong>
+        <strong data-count="{{ completed_exam_count }}">{{ completed_exam_count }}</strong>
         <span>Bài đã hoàn thành</span>
       </div>
     </div>
-    {% endif %} {% if profile.role != "student" %}
-    <div class="metric">
-      <span class="metric-icon metric-green"
-        ><i class="bi bi-shield-check"></i
-      ></span>
+    {% endif %}
+    {% if profile.role != "student" %}
+    <div class="hx-metric hx-reveal" style="--i:2">
+      <span class="hx-ico"><i class="bi bi-shield-check"></i></span>
       <div>
         <strong>{{ profile.get_role_display }}</strong>
         <span>Quyền truy cập</span>
@@ -80,50 +209,45 @@
     {% endif %}
   </section>
 
-  <div class="dashboard-columns">
-    <section class="dashboard-section">
-      <div class="section-heading">
+  <!-- ===================== KHÓA HỌC + BÀI THI ===================== -->
+  <div class="hx-columns">
+    <section class="hx-panel hx-reveal">
+      <div class="hx-panel-head">
         <div>
-          <p class="eyebrow">HỌC TẬP</p>
+          <p class="hx-kicker">Học tập</p>
           <h2>Khóa học của bạn</h2>
         </div>
-        <a href="{% url 'course_list' %}"
-          >Tất cả <i class="bi bi-arrow-right"></i
-        ></a>
+        <a href="{% url 'course_list' %}">Tất cả <i class="bi bi-arrow-right"></i></a>
       </div>
-      <div class="course-list">
+      <div class="hx-list">
         {% for course in dashboard_courses %}
-        <a class="course-row" href="{% url 'course_list' %}">
-          <span class="course-code">{{ course.code }}</span>
-          <span class="course-name">{{ course.name }}</span>
+        <a class="hx-row" href="{% url 'course_list' %}">
+          <span class="hx-code">{{ course.code }}</span>
+          <span class="hx-row-name">{{ course.name }}</span>
           <i class="bi bi-chevron-right"></i>
         </a>
         {% empty %}
-        <p class="empty-state">
-          Chưa có khóa học được phân công hoặc ghi danh.
-        </p>
+        <p class="hx-empty">Chưa có khóa học được phân công hoặc ghi danh.</p>
         {% endfor %}
       </div>
     </section>
 
-    <section class="dashboard-section exam-section">
-      <div class="section-heading">
+    <section class="hx-panel hx-reveal" style="--i:1">
+      <div class="hx-panel-head">
         <div>
-          <p class="eyebrow">LỊCH KHẢO THÍ</p>
+          <p class="hx-kicker">Lịch khảo thí</p>
           <h2>Bài thi sắp tới</h2>
         </div>
-        <a href="{% url 'exam_list' %}"
-          >Danh sách <i class="bi bi-arrow-right"></i
-        ></a>
+        <a href="{% url 'exam_list' %}">Danh sách <i class="bi bi-arrow-right"></i></a>
       </div>
-      <div class="exam-list">
+      <div class="hx-list">
         {% for exam in upcoming_exams %}
-        <div class="exam-row">
-          <span class="exam-date">
+        <div class="hx-row hx-exam">
+          <span class="hx-date">
             <strong>{{ exam.start_time|date:"d" }}</strong>
             <small>{{ exam.start_time|date:"m/Y" }}</small>
           </span>
-          <div class="exam-info">
+          <div class="hx-exam-info">
             <strong>{{ exam.title }}</strong>
             <span>{{ exam.dashboard_course_label }}</span>
           </div>
@@ -137,22 +261,58 @@
           </a>
         </div>
         {% empty %}
-        <p class="empty-state">Chưa có bài thi sắp tới.</p>
+        <p class="hx-empty">Chưa có bài thi sắp tới.</p>
         {% endfor %}
       </div>
     </section>
   </div>
-  {% endif %} {% if not profile %}
-  <section class="public-note">
-    <i class="bi bi-mortarboard"></i>
-    <div>
-      <h2>Không gian học tập và khảo thí STU</h2>
-      <p>
-        Đăng nhập để xem khóa học, lịch thi, hồ sơ và kết quả theo vai trò của
-        bạn.
-      </p>
+
+  <!-- ===================== TRUY CẬP NHANH THEO VAI TRÒ ===================== -->
+  <section class="hx-section hx-tight">
+    <div class="hx-head hx-reveal">
+      <h2>Truy cập nhanh</h2>
+    </div>
+    <div class="hx-grid hx-grid-quick">
+      <a class="hx-card hx-quick hx-reveal" style="--i:0" href="{% url 'exam_list' %}">
+        <span class="hx-ico"><i class="bi bi-pencil-square"></i></span>
+        <h3>{% if profile.role == "student" %}Bài thi{% else %}Quản lý bài thi{% endif %}</h3>
+      </a>
+      {% if profile.role == "student" %}
+      <a class="hx-card hx-quick hx-reveal" style="--i:1" href="{% url 'exam_result_list' %}">
+        <span class="hx-ico"><i class="bi bi-graph-up-arrow"></i></span>
+        <h3>Kết quả của tôi</h3>
+      </a>
+      {% endif %}
+      {% if profile.role == "lecturer" or profile.role == "admin" %}
+      <a class="hx-card hx-quick hx-reveal" style="--i:1" href="{% url 'teacher_results' %}">
+        <span class="hx-ico"><i class="bi bi-clipboard-data"></i></span>
+        <h3>Kết quả lớp</h3>
+      </a>
+      <a class="hx-card hx-quick hx-reveal" style="--i:2" href="{% url 'face_attendance' %}">
+        <span class="hx-ico"><i class="bi bi-person-check"></i></span>
+        <h3>Điểm danh khuôn mặt</h3>
+      </a>
+      {% endif %}
+      <a class="hx-card hx-quick hx-reveal" style="--i:3" href="{% url 'profile' %}">
+        <span class="hx-ico"><i class="bi bi-person-vcard"></i></span>
+        <h3>Hồ sơ cá nhân</h3>
+      </a>
     </div>
   </section>
+
+  <!-- ===================== QUY TRÌNH (GỌN) ===================== -->
+  <section class="hx-section hx-section-alt hx-tight">
+    <div class="hx-head hx-reveal">
+      <h2>Quy trình sử dụng</h2>
+    </div>
+    <ol class="hx-steps">
+      <li class="hx-step hx-reveal" style="--i:0"><span class="hx-num">1</span><h3>Đăng nhập hệ thống</h3></li>
+      <li class="hx-step hx-reveal" style="--i:1"><span class="hx-num">2</span><h3>Truy cập bài thi</h3></li>
+      <li class="hx-step hx-reveal" style="--i:2"><span class="hx-num">3</span><h3>Thực hiện bài thi</h3></li>
+      <li class="hx-step hx-reveal" style="--i:3"><span class="hx-num">4</span><h3>Nộp bài, xem kết quả</h3></li>
+    </ol>
+  </section>
   {% endif %}
+
 </main>
 {% endblock %}

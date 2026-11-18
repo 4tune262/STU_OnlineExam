@@ -1,5 +1,6 @@
 import json
 import base64
+import copy
 import math
 import random
 import re
@@ -22,10 +23,18 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import Http404, HttpResponse, JsonResponse, QueryDict, HttpResponseForbidden
 from django.contrib.auth import login
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.utils import timezone
 from django.views.decorators.http import require_POST, require_GET
 from django_ratelimit.decorators import ratelimit
+from django.core.exceptions import ValidationError
+import pyotp
+import time
+from django.db import transaction
+from django.utils import timezone
+
+from .models import TOTPDevice
+from .totp_utils import encrypt_totp_secret, decrypt_totp_secret
 from .models import (
     UserProfile,
     FaceProfile,
@@ -38,8 +47,16 @@ from .models import (
     StudentAnswer,
     TeachingAssignment,
     Enrollment,
+    ExamAttendance,
+    ExamAssignment,
+    ExamPaper,
 )
-
+from .services.exam_paper_service import (
+    create_exam_paper,
+    copy_exam_paper,
+    assign_paper_manual,
+    assign_papers_random,
+)
 from .exam_engine import (
     build_student_snapshot,
     get_student_exam_questions,
@@ -50,7 +67,7 @@ from .vision import (
     proctoring_available,
 )
 
-from compiler.run import run_cpp
+from compiler.run import run_cpp, run_code_by_language
 
 
 # ============================================================
@@ -439,6 +456,9 @@ def profile_view(request):
     face_profile = FaceProfile.objects.filter(
         user_profile=user_profile
     ).first()
+    totp_device = TOTPDevice.objects.filter(
+        profile=user_profile
+    ).first()
     return render(
         request,
         "profile.html",
@@ -446,9 +466,480 @@ def profile_view(request):
             "title": "Hồ sơ cá nhân",
             "profile": user_profile,
             "face_profile": face_profile,
+            "totp_device": totp_device,
         },
     )
 
+
+@login_required(login_url="qr_login_page")
+@require_POST
+def totp_setup(request):
+    """
+    Tạo hoặc cấp lại khóa TOTP đang ở trạng thái chưa kích hoạt.
+    Chỉ người dùng đã đăng nhập mới được đăng ký TOTP.
+    """
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+
+        # Khóa cũ đang bật không được âm thầm thay thế.
+        device = TOTPDevice.objects.filter(
+            profile=profile
+        ).first()
+
+        if device and device.is_enabled:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": (
+                        "TOTP đã được kích hoạt. "
+                        "Không thể tạo lại khóa tại đây."
+                    ),
+                },
+                status=409,
+            )
+
+        secret = pyotp.random_base32()
+
+        # Sinh URI theo chuẩn otpauth để Authenticator quét.
+        totp = pyotp.TOTP(secret)
+
+        provisioning_uri = totp.provisioning_uri(
+            name=request.user.username,
+            issuer_name="STU Online Examination",
+        )
+
+        # Tạo ảnh QR PNG và chuyển thành Base64.
+        import qrcode
+
+        qr_image = qrcode.make(provisioning_uri)
+        buffer = BytesIO()
+        qr_image.save(buffer, format="PNG")
+
+        qr_base64 = base64.b64encode(
+            buffer.getvalue()
+        ).decode("utf-8")
+
+        # Chỉ lưu khóa đã mã hóa; chưa bật TOTP.
+        with transaction.atomic():
+            device, _ = TOTPDevice.objects.get_or_create(
+                profile=profile,
+                defaults={
+                    "secret_encrypted": encrypt_totp_secret(
+                        secret
+                    ),
+                    "is_enabled": False,
+                },
+            )
+
+            if not device.is_enabled:
+                device.secret_encrypted = encrypt_totp_secret(
+                    secret
+                )
+                device.last_verified_counter = None
+                device.failed_attempts = 0
+                device.locked_until = None
+                device.save(
+                    update_fields=[
+                        "secret_encrypted",
+                        "last_verified_counter",
+                        "failed_attempts",
+                        "locked_until",
+                        "updated_at",
+                    ]
+                )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": (
+                    "Đã tạo mã đăng ký TOTP. "
+                    "Hãy quét QR và xác minh mã để kích hoạt."
+                ),
+                "qr_image": f"data:image/png;base64,{qr_base64}",
+            }
+        )
+
+    except UserProfile.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Tài khoản chưa có hồ sơ người dùng.",
+            },
+            status=400,
+        )
+
+    except Exception:
+        logger.exception("Không thể tạo đăng ký TOTP.")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không thể tạo đăng ký TOTP lúc này.",
+            },
+            status=500,
+        )
+
+
+
+
+
+@login_required(login_url="qr_login_page")
+@require_POST
+def totp_confirm(request):
+    """
+    Xác minh mã TOTP trước khi kích hoạt phương thức đăng nhập.
+    """
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Dữ liệu gửi lên không hợp lệ.",
+            },
+            status=400,
+        )
+
+    code = str(data.get("code", "")).strip()
+
+    if not re.fullmatch(r"\d{6}", code):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Mã xác minh phải gồm đúng 6 chữ số.",
+            },
+            status=400,
+        )
+
+    try:
+        profile = UserProfile.objects.get(user=request.user)
+
+        with transaction.atomic():
+            device = (
+                TOTPDevice.objects
+                .select_for_update()
+                .filter(profile=profile)
+                .first()
+            )
+
+            if not device or not device.secret_encrypted:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Bạn chưa bắt đầu đăng ký TOTP.",
+                    },
+                    status=400,
+                )
+
+            if device.is_enabled:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "TOTP đã được kích hoạt.",
+                    },
+                    status=409,
+                )
+
+            secret = decrypt_totp_secret(
+                device.secret_encrypted
+            )
+
+            totp = pyotp.TOTP(secret)
+
+            # Cho phép sai lệch tối đa một chu kỳ 30 giây.
+            if not totp.verify(code, valid_window=1):
+                device.failed_attempts += 1
+
+                if device.failed_attempts >= 5:
+                    device.locked_until = (
+                        timezone.now() + timedelta(minutes=5)
+                    )
+                    device.failed_attempts = 0
+
+                device.save(
+                    update_fields=[
+                        "failed_attempts",
+                        "locked_until",
+                        "updated_at",
+                    ]
+                )
+
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Mã TOTP không chính xác.",
+                    },
+                    status=400,
+                )
+
+            # Chỉ kích hoạt sau khi mã được xác minh.
+            device.is_enabled = True
+            device.failed_attempts = 0
+            device.locked_until = None
+            device.save(
+                update_fields=[
+                    "is_enabled",
+                    "failed_attempts",
+                    "locked_until",
+                    "updated_at",
+                ]
+            )
+            if (
+                    device.locked_until
+                    and device.locked_until > timezone.now()
+            ):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Bạn thử sai quá nhiều lần. Vui lòng thử lại sau.",
+                    },
+                    status=429,
+                )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Đã kích hoạt đăng nhập bằng TOTP.",
+            }
+        )
+
+    except UserProfile.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không tìm thấy hồ sơ người dùng.",
+            },
+            status=400,
+        )
+
+    except ValueError:
+        logger.exception("Không thể giải mã khóa TOTP.")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không thể xác minh TOTP. Vui lòng liên hệ quản trị viên.",
+            },
+            status=500,
+        )
+
+    except Exception:
+        logger.exception("Lỗi khi xác minh đăng ký TOTP.")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không thể xác minh TOTP lúc này.",
+            },
+            status=500,
+        )
+
+
+
+
+@ratelimit(key="ip", rate="5/m", method="POST", block=False)
+@require_POST
+def verify_totp_login(request):
+    """
+    Đăng nhập bằng username/mã số + mã TOTP 6 chữ số.
+    Không thay đổi luồng đăng nhập QR hoặc nhận diện khuôn mặt.
+    """
+    if getattr(request, "limited", False):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Bạn thử đăng nhập quá nhiều lần. Vui lòng thử lại sau.",
+            },
+            status=429,
+        )
+
+    try:
+        data = json.loads(request.body or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Dữ liệu đăng nhập không hợp lệ.",
+            },
+            status=400,
+        )
+
+    identifier = str(data.get("identifier", "")).strip()
+    code = str(data.get("code", "")).strip()
+
+    if not identifier or not re.fullmatch(r"\d{6}", code):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Vui lòng nhập tài khoản và mã xác minh gồm 6 chữ số.",
+            },
+            status=400,
+        )
+
+    # Tìm theo username, mã sinh viên hoặc mã giảng viên.
+    profiles = (
+        UserProfile.objects
+        .filter(
+            Q(user__username=identifier)
+            | Q(student_id=identifier)
+            | Q(lecturer_id=identifier)
+        )
+        .select_related("user")
+        .distinct()
+    )
+
+    # Không chọn .first() vì mã số có thể bị trùng.
+    if profiles.count() != 1:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Thông tin đăng nhập hoặc mã TOTP không hợp lệ.",
+            },
+            status=401,
+        )
+
+    profile = profiles.first()
+
+    if not profile.user.is_active:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Thông tin đăng nhập hoặc mã TOTP không hợp lệ.",
+            },
+            status=401,
+        )
+
+    user = profile.user
+
+    try:
+        with transaction.atomic():
+            device = (
+                TOTPDevice.objects
+                .select_for_update()
+                .filter(profile=profile)
+                .first()
+            )
+
+            if (
+                not device
+                or not device.is_enabled
+                or not device.secret_encrypted
+            ):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Thông tin đăng nhập hoặc mã TOTP không hợp lệ.",
+                    },
+                    status=401,
+                )
+
+            now = timezone.now()
+
+            if device.locked_until and device.locked_until > now:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Bạn thử sai quá nhiều lần. Vui lòng thử lại sau.",
+                    },
+                    status=429,
+                )
+
+            secret = decrypt_totp_secret(
+                device.secret_encrypted
+            )
+            totp = pyotp.TOTP(secret)
+
+            # Kiểm tra mã hiện tại và hai chu kỳ lân cận.
+            # Chỉ chấp nhận counter mới hơn counter đã sử dụng.
+            current_counter = int(time.time() // totp.interval)
+            matched_counter = None
+
+            for counter in (
+                current_counter - 1,
+                current_counter,
+                current_counter + 1,
+            ):
+                if counter < 0:
+                    continue
+
+                if hmac.compare_digest(
+                    totp.generate_otp(counter),
+                    code,
+                ):
+                    matched_counter = counter
+                    break
+
+            if (
+                matched_counter is None
+                or (
+                    device.last_verified_counter is not None
+                    and matched_counter <= device.last_verified_counter
+                )
+            ):
+                device.failed_attempts += 1
+
+                if device.failed_attempts >= 5:
+                    device.failed_attempts = 0
+                    device.locked_until = (
+                        now + timedelta(minutes=5)
+                    )
+
+                device.save(
+                    update_fields=[
+                        "failed_attempts",
+                        "locked_until",
+                        "updated_at",
+                    ]
+                )
+
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": "Thông tin đăng nhập hoặc mã TOTP không hợp lệ.",
+                    },
+                    status=401,
+                )
+
+            # Ghi nhận counter đã dùng để chặn phát lại cùng mã.
+            device.last_verified_counter = matched_counter
+            device.failed_attempts = 0
+            device.locked_until = None
+            device.save(
+                update_fields=[
+                    "last_verified_counter",
+                    "failed_attempts",
+                    "locked_until",
+                    "updated_at",
+                ]
+            )
+
+        # Chỉ đăng nhập sau khi mã đã được xác minh thành công.
+        login(request, user)
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "Đăng nhập bằng TOTP thành công.",
+                "redirect_url": "/",
+            }
+        )
+
+    except ValueError:
+        logger.exception("Không thể giải mã khóa TOTP khi đăng nhập.")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không thể xác minh TOTP lúc này.",
+            },
+            status=500,
+        )
+
+    except Exception:
+        logger.exception("Lỗi khi đăng nhập bằng TOTP.")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không thể xử lý đăng nhập lúc này.",
+            },
+            status=500,
+        )
 
 
 # ============================================================
@@ -1259,6 +1750,41 @@ def course_list_view(request):
     )
 
 
+
+
+def build_student_snapshot_from_paper(exam, paper):
+    """
+    Tạo snapshot theo đúng cấu trúc hiện tại của exam_engine,
+    nhưng sử dụng question_data và paper_code của ExamPaper.
+    """
+
+    if paper.exam_id != exam.pk:
+        raise ValueError("Phiên bản đề không thuộc bài thi này.")
+
+    if not paper.is_active:
+        raise ValueError("Phiên bản đề đã ngừng sử dụng.")
+
+    # Tạo bản sao Exam để không thay đổi dữ liệu Exam gốc.
+    exam_for_snapshot = copy.copy(exam)
+
+    exam_for_snapshot.question_data = copy.deepcopy(
+        paper.question_data
+    )
+
+    exam_for_snapshot.paper_codes = [
+        paper.paper_code
+    ]
+
+    snapshot = build_student_snapshot(
+        exam_for_snapshot
+    )
+
+    # Đảm bảo mã đề chính xác theo ExamPaper.
+    snapshot["paper_code"] = paper.paper_code
+
+    return snapshot
+
+
 # ============================================================
 # TAKE EXAM
 # ============================================================
@@ -1334,6 +1860,31 @@ def take_exam_view(request, exam_id):
         return redirect("course_list")
 
     # ========================================================
+    # 4.1. KIỂM TRA ĐIỂM DANH ĐỐI VỚI BÀI THI TẠI LỚP
+    # ========================================================
+
+    if exam.exam_type == Exam.EXAM_TYPE_CLASSROOM:
+
+        is_attended = ExamAttendance.objects.filter(
+            exam=exam,
+            student=profile,
+        ).exists()
+
+        if not is_attended:
+
+            messages.error(
+                request,
+                (
+                    "Bạn chưa được điểm danh khuôn mặt. "
+                    "Vui lòng liên hệ giảng viên để được "
+                    "điểm danh trước khi vào bài thi tại lớp."
+                ),
+            )
+
+            return redirect("course_list")
+
+
+    # ========================================================
     # 5. KIỂM TRA THỜI GIAN
     # ========================================================
 
@@ -1402,12 +1953,77 @@ def take_exam_view(request, exam_id):
 
         try:
 
-            paper = build_student_snapshot(exam)
-            paper_codes = exam.paper_codes or []
-            if assigned_computer and paper_codes:
-                paper["paper_code"] = paper_codes[
-                    (assigned_computer.computer_number - 1) % len(paper_codes)
-                ]
+            # ------------------------------------------------
+            # 8.1. Kiểm tra bài thi có sử dụng phiên bản đề không
+            # ------------------------------------------------
+
+            has_exam_papers = exam.papers.exists()
+
+            selected_paper = None
+            assignment = None
+
+            if has_exam_papers:
+
+                # Sinh viên bắt buộc phải có phân công đề.
+                assignment = (
+                    ExamAssignment.objects
+                    .select_related("paper")
+                    .filter(
+                        exam=exam,
+                        student=profile,
+                    )
+                    .first()
+                )
+
+                if assignment is None:
+                    messages.error(
+                        request,
+                        "Bạn chưa được phân công phiên bản đề thi. "
+                        "Vui lòng liên hệ giảng viên.",
+                    )
+
+                    return redirect("course_list")
+
+                selected_paper = assignment.paper
+
+                if selected_paper.exam_id != exam.pk:
+                    messages.error(
+                        request,
+                        "Phiên bản đề được phân công không hợp lệ.",
+                    )
+
+                    return redirect("course_list")
+
+                if not selected_paper.is_active:
+                    messages.error(
+                        request,
+                        "Phiên bản đề được phân công đã ngừng sử dụng.",
+                    )
+
+                    return redirect("course_list")
+
+                # Tạo snapshot từ ExamPaper.
+                paper = build_student_snapshot_from_paper(
+                    exam,
+                    selected_paper,
+                )
+
+            else:
+
+                # Bài thi cũ: giữ nguyên cơ chế tạo đề.
+                paper = build_student_snapshot(exam)
+
+                paper_codes = exam.paper_codes or []
+
+                if assigned_computer and paper_codes:
+                    paper["paper_code"] = paper_codes[
+                        (assigned_computer.computer_number - 1)
+                        % len(paper_codes)
+                        ]
+
+            # ------------------------------------------------
+            # 8.2. Lưu StudentExam
+            # ------------------------------------------------
 
             with transaction.atomic():
 
@@ -1415,51 +2031,108 @@ def take_exam_view(request, exam_id):
                     student=request.user,
                     exam=exam,
                     exam_computer=assigned_computer,
+
+                    # Phiên bản đề được phân công.
+                    paper=selected_paper,
+                    assignment=assignment,
+
                     exam_code=paper["paper_code"],
                     question_snapshot=paper,
                 )
 
-        except Exception as e:
+
+        except Exception:
+
+            logger.exception(
+
+                "Không thể tạo StudentExam cho user_id=%s, exam_id=%s",
+
+                request.user.pk,
+
+                exam.pk,
+
+            )
 
             messages.error(
+
                 request,
-                f"Không thể tạo đề thi: {e}",
+
+                "Không thể tạo đề thi lúc này. "
+
+                "Vui lòng thử lại hoặc liên hệ giảng viên.",
+
             )
 
             return redirect("course_list")
-
     # ========================================================
     # 9. ĐẢM BẢO SNAPSHOT TỒN TẠI
     #
-    # Chỉ dùng cho attempt cũ bị thiếu snapshot.
-    # Nếu snapshot đã tồn tại thì tuyệt đối không tạo lại.
+    # Không ghi đè snapshot đã tồn tại.
+    # Nếu attempt thuộc phiên bản đề thì lấy đúng phiên bản đó.
     # ========================================================
 
     if not student_exam.question_snapshot:
 
         try:
 
-            paper = build_student_snapshot(exam)
+            if student_exam.paper_id:
 
-            student_exam.question_snapshot = paper
-            student_exam.exam_code = paper["paper_code"]
+                # Attempt đã gắn phiên bản đề.
+                if student_exam.paper.exam_id != exam.pk:
+                    raise ValueError(
+                        "Phiên bản đề không thuộc bài thi này."
+                    )
 
-            student_exam.save(
-                update_fields=[
-                    "question_snapshot",
-                    "exam_code",
-                ],
+                paper = build_student_snapshot_from_paper(
+                    exam,
+                    student_exam.paper,
+                )
+
+            else:
+
+                # Nếu bài thi đã sử dụng ExamPaper thì không được
+                # tự động lấy đề gốc Exam.question_data để thay thế.
+                if exam.papers.exists():
+                    logger.error(
+                        "StudentExam id=%s thiếu liên kết ExamPaper "
+                        "trong khi Exam id=%s đã có phiên bản đề.",
+                        student_exam.pk,
+                        exam.pk,
+                    )
+
+                    raise ValueError(
+                        "Bài thi thiếu thông tin phiên bản đề. "
+                        "Vui lòng liên hệ giảng viên."
+                    )
+
+                # Chỉ bài thi cũ chưa sử dụng ExamPaper mới dùng
+                # cơ chế tạo snapshot cũ.
+                paper = build_student_snapshot(exam)
+
+
+
+
+        except Exception:
+
+            logger.exception(
+
+                "Không thể khôi phục snapshot StudentExam id=%s",
+
+                student_exam.pk,
+
             )
 
-        except Exception as e:
-
             messages.error(
+
                 request,
-                f"Không thể tạo snapshot đề thi: {e}",
+
+                "Không thể khôi phục dữ liệu đề thi. "
+
+                "Vui lòng liên hệ giảng viên.",
+
             )
 
             return redirect("course_list")
-
     # ========================================================
     # 10. LẤY QUESTIONS TỪ SNAPSHOT
     #
@@ -1922,7 +2595,8 @@ def run_code(request):
                 ),
             )
 
-            result = run_cpp(
+            result = run_code_by_language(
+                question.get("language", "cpp"),
                 code,
                 input_data,
             )
@@ -2568,7 +3242,8 @@ def _grade_student_exam(
                     )
                 ).strip()
 
-                result = run_cpp(
+                result = run_code_by_language(
+                    question.get("language", "cpp"),
                     answer_content,
                     input_data,
                 )
@@ -3484,6 +4159,1134 @@ def is_teacher(user):
             )
         )
     )
+
+def _paper_attempts(paper):
+    """
+    Tìm mọi lượt thi có liên kết đến phiên bản đề,
+    kể cả liên kết trực tiếp qua paper hoặc gián tiếp qua assignment.
+    """
+
+    return StudentExam.objects.filter(
+        Q(paper_id=paper.pk)
+        | Q(assignment__paper_id=paper.pk)
+    ).distinct()
+
+
+def _validate_paper_question_data(question_data):
+    """
+    Chỉ chấp nhận đúng 4 loại câu hỏi của hệ thống.
+    """
+
+    if not isinstance(question_data, list):
+        raise ValidationError(
+            "Dữ liệu câu hỏi phải là một danh sách."
+        )
+
+    if not question_data:
+        raise ValidationError(
+            "Phiên bản đề phải có ít nhất một câu hỏi."
+        )
+
+    allowed_types = {
+        "MCQ",
+        "DRAG",
+        "SORT",
+        "CODE",
+    }
+
+    for index, question in enumerate(
+        question_data,
+        start=1,
+    ):
+
+        if not isinstance(question, dict):
+            raise ValidationError(
+                f"Câu {index}: dữ liệu câu hỏi không hợp lệ."
+            )
+
+        question_type = str(
+            question.get("type", "")
+        ).strip().upper()
+
+        if question_type not in allowed_types:
+            raise ValidationError(
+                f"Câu {index}: chỉ hỗ trợ MCQ, DRAG, SORT và CODE."
+            )
+
+        question["type"] = question_type
+
+    return question_data
+
+# ============================================================
+# TEACHER EXAM PAPER MANAGEMENT
+# ============================================================
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+def teacher_exam_papers(request, exam_id):
+    """
+    Hiển thị danh sách phiên bản đề và quyền thao tác.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    papers = (
+        ExamPaper.objects
+        .filter(exam=exam)
+        .select_related("copied_from")
+        .order_by("paper_number")
+    )
+
+    paper_rows = []
+
+    for paper in papers:
+
+        assignment_count = paper.assignments.count()
+
+        attempt_count = _paper_attempts(
+            paper
+        ).count()
+
+        paper_rows.append({
+            "paper": paper,
+            "assignment_count": assignment_count,
+            "attempt_count": attempt_count,
+
+            # Chỉ được sửa/xóa nếu chưa có lượt thi.
+            "can_modify": attempt_count == 0,
+        })
+
+    return render(
+        request,
+        "exam/teacher_exam_papers.html",
+        {
+            "exam": exam,
+            "paper_rows": paper_rows,
+        },
+    )
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+def teacher_create_exam_paper(request, exam_id):
+    """
+    Tạo một phiên bản đề độc lập cho bài thi.
+    Giảng viên nhập câu hỏi bằng giao diện biểu mẫu.
+    JSON được tạo tự động ở phía trình duyệt.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    last_number = (
+        ExamPaper.objects
+        .filter(exam=exam)
+        .order_by("-paper_number")
+        .values_list("paper_number", flat=True)
+        .first()
+    )
+
+    next_number = (last_number or 0) + 1
+
+    # Giá trị hiển thị lại nếu biểu mẫu gặp lỗi.
+    paper_number_input = str(next_number)
+    paper_code_input = ""
+    title_input = ""
+
+    question_data_text = json.dumps(
+        exam.question_data or [],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    if request.method == "POST":
+
+        paper_number_input = request.POST.get(
+            "paper_number",
+            "",
+        ).strip()
+
+        paper_code_input = request.POST.get(
+            "paper_code",
+            "",
+        ).strip()
+
+        title_input = request.POST.get(
+            "title",
+            "",
+        ).strip()
+
+        question_data_text = request.POST.get(
+            "question_data",
+            "",
+        )
+
+        try:
+            paper_number = int(paper_number_input)
+
+            question_data = json.loads(
+                question_data_text
+            )
+
+            if not isinstance(question_data, list):
+                raise ValidationError(
+                    "Danh sách câu hỏi không hợp lệ."
+                )
+
+            if not question_data:
+                raise ValidationError(
+                    "Phiên bản đề phải có ít nhất một câu hỏi."
+                )
+
+            # Hệ thống chỉ hỗ trợ đúng 4 loại câu hỏi.
+            allowed_question_types = {
+                "MCQ",
+                "DRAG",
+                "SORT",
+                "CODE",
+            }
+
+            for index, question in enumerate(
+                question_data,
+                start=1,
+            ):
+
+                if not isinstance(question, dict):
+                    raise ValidationError(
+                        f"Câu {index}: dữ liệu câu hỏi không hợp lệ."
+                    )
+
+                question_type = str(
+                    question.get("type", "")
+                ).strip().upper()
+
+                if question_type not in allowed_question_types:
+                    raise ValidationError(
+                        f"Câu {index}: loại câu hỏi không được hỗ trợ. "
+                        "Chỉ chấp nhận MCQ, DRAG, SORT và CODE."
+                    )
+
+                # Chuẩn hóa kiểu câu hỏi trước khi lưu.
+                question["type"] = question_type
+
+            create_exam_paper(
+                exam,
+                paper_number=paper_number,
+                paper_code=paper_code_input,
+                title=title_input,
+                question_data=question_data,
+            )
+
+            messages.success(
+                request,
+                "Tạo phiên bản đề thành công.",
+            )
+
+            return redirect(
+                "teacher_exam_papers",
+                exam_id=exam.pk,
+            )
+
+        except json.JSONDecodeError:
+            messages.error(
+                request,
+                "Dữ liệu câu hỏi không hợp lệ. "
+                "Vui lòng kiểm tra lại biểu mẫu.",
+            )
+
+        except ValueError:
+            messages.error(
+                request,
+                "Số thứ tự phiên bản phải là số nguyên.",
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                "; ".join(exc.messages),
+            )
+
+    return render(
+        request,
+        "exam/teacher_exam_paper_form.html",
+        {
+            "exam": exam,
+            "form_title": "Tạo phiên bản đề mới",
+            "submit_label": "Tạo phiên bản đề",
+            "paper_number": paper_number_input,
+            "paper_code": paper_code_input,
+            "title": title_input,
+            "question_data_text": question_data_text,
+            "show_question_data": True,
+        },
+    )
+
+
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+def teacher_edit_exam_paper(
+    request,
+    exam_id,
+    paper_id,
+):
+    """
+    Chỉnh sửa thông tin và nội dung phiên bản đề.
+
+    Không cho phép sửa khi đã có lượt thi.
+    Có thể chỉnh sửa khi đã phân công nhưng sinh viên chưa bắt đầu.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    paper = get_object_or_404(
+        ExamPaper,
+        pk=paper_id,
+        exam=exam,
+    )
+
+    if _paper_attempts(paper).exists():
+
+        messages.error(
+            request,
+            (
+                "Phiên bản đề đã có lượt thi nên không thể "
+                "chỉnh sửa nội dung để bảo toàn lịch sử."
+            ),
+        )
+
+        return redirect(
+            "teacher_exam_papers",
+            exam_id=exam.pk,
+        )
+
+    question_data_text = json.dumps(
+        paper.question_data or [],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    paper_number_input = paper.paper_number
+    paper_code_input = paper.paper_code
+    title_input = paper.title
+
+    if request.method == "POST":
+
+        paper_number_input = request.POST.get(
+            "paper_number",
+            "",
+        ).strip()
+
+        paper_code_input = request.POST.get(
+            "paper_code",
+            "",
+        ).strip()
+
+        title_input = request.POST.get(
+            "title",
+            "",
+        ).strip()
+
+        question_data_text = request.POST.get(
+            "question_data",
+            "",
+        )
+
+        try:
+            paper_number = int(paper_number_input)
+
+            question_data = json.loads(
+                question_data_text
+            )
+
+            question_data = _validate_paper_question_data(
+                question_data
+            )
+
+            with transaction.atomic():
+
+                locked_paper = (
+                    ExamPaper.objects
+                    .select_for_update()
+                    .get(
+                        pk=paper_id,
+                        exam=exam,
+                    )
+                )
+
+                # Kiểm tra lại trong transaction để tránh
+                # trường hợp sinh viên bắt đầu thi đồng thời.
+                if _paper_attempts(locked_paper).exists():
+
+                    raise ValidationError(
+                        "Phiên bản đề vừa phát sinh lượt thi. "
+                        "Không thể tiếp tục chỉnh sửa."
+                    )
+
+                locked_paper.paper_number = paper_number
+                locked_paper.paper_code = paper_code_input
+                locked_paper.title = title_input
+                locked_paper.question_data = question_data
+
+                locked_paper.full_clean()
+
+                locked_paper.save()
+
+            messages.success(
+                request,
+                "Cập nhật phiên bản đề thành công.",
+            )
+
+            return redirect(
+                "teacher_exam_papers",
+                exam_id=exam.pk,
+            )
+
+        except json.JSONDecodeError:
+            messages.error(
+                request,
+                "Dữ liệu câu hỏi không hợp lệ.",
+            )
+
+        except ValueError:
+            messages.error(
+                request,
+                "Số thứ tự phiên bản phải là số nguyên.",
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                "; ".join(exc.messages),
+            )
+
+    return render(
+        request,
+        "exam/teacher_exam_paper_form.html",
+        {
+            "exam": exam,
+            "form_title": "Chỉnh sửa phiên bản đề",
+            "submit_label": "Lưu thay đổi",
+            "paper_number": paper_number_input,
+            "paper_code": paper_code_input,
+            "title": title_input,
+            "question_data_text": question_data_text,
+            "show_question_data": True,
+            "editing_paper": paper,
+        },
+    )
+
+
+
+
+
+# ============================================================
+# COPY EXAM PAPER
+# ============================================================
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+def teacher_copy_exam_paper(
+    request,
+    exam_id,
+    paper_id,
+):
+    """
+    Sao chép phiên bản đề và cho phép chỉnh sửa bản sao
+    ngay trong giao diện tạo đề.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    source_paper = get_object_or_404(
+        ExamPaper,
+        pk=paper_id,
+        exam=exam,
+    )
+
+    last_number = (
+        ExamPaper.objects
+        .filter(exam=exam)
+        .order_by("-paper_number")
+        .values_list("paper_number", flat=True)
+        .first()
+    )
+
+    next_number = (last_number or 0) + 1
+
+    title_input = source_paper.title
+
+    # Nạp toàn bộ câu hỏi từ phiên bản gốc vào trình biên tập.
+    question_data_text = json.dumps(
+        source_paper.question_data or [],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    paper_number_input = str(next_number)
+    paper_code_input = ""
+
+    if request.method == "POST":
+
+        paper_number_input = request.POST.get(
+            "paper_number",
+            "",
+        ).strip()
+
+        paper_code_input = request.POST.get(
+            "paper_code",
+            "",
+        ).strip()
+
+        title_input = request.POST.get(
+            "title",
+            "",
+        ).strip()
+
+        question_data_text = request.POST.get(
+            "question_data",
+            "",
+        )
+
+        try:
+            paper_number = int(
+                paper_number_input
+            )
+
+            question_data = json.loads(
+                question_data_text
+            )
+
+            question_data = _validate_paper_question_data(
+                question_data
+            )
+
+            copy_exam_paper(
+                source_paper,
+                paper_number=paper_number,
+                paper_code=paper_code_input,
+                title=title_input,
+                question_data=question_data,
+            )
+
+            messages.success(
+                request,
+                (
+                    f"Đã sao chép {source_paper.paper_code} "
+                    "thành phiên bản mới. "
+                    "Nội dung đã được lưu độc lập."
+                ),
+            )
+
+            return redirect(
+                "teacher_exam_papers",
+                exam_id=exam.pk,
+            )
+
+        except json.JSONDecodeError:
+            messages.error(
+                request,
+                "Dữ liệu câu hỏi không hợp lệ.",
+            )
+
+        except ValueError:
+            messages.error(
+                request,
+                "Số thứ tự phiên bản phải là số nguyên.",
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                "; ".join(exc.messages),
+            )
+
+    return render(
+        request,
+        "exam/teacher_exam_paper_form.html",
+        {
+            "exam": exam,
+            "source_paper": source_paper,
+            "form_title": "Sao chép và chỉnh sửa phiên bản đề",
+            "submit_label": "Tạo phiên bản đề từ bản sao",
+            "paper_number": paper_number_input,
+            "paper_code": paper_code_input,
+            "title": title_input,
+            "question_data_text": question_data_text,
+
+            # Bật trình biên tập câu hỏi cho bản sao.
+            "show_question_data": True,
+        },
+    )
+
+
+
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+@require_POST
+def teacher_delete_exam_paper(
+    request,
+    exam_id,
+    paper_id,
+):
+    """
+    Xóa phiên bản đề.
+
+    - Không xóa nếu đã có lượt thi.
+    - Nếu mới phân công nhưng chưa thi:
+      hủy các phân công đó rồi mới xóa phiên bản.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    try:
+        with transaction.atomic():
+
+            paper = get_object_or_404(
+                ExamPaper.objects.select_for_update(),
+                pk=paper_id,
+                exam=exam,
+            )
+
+            if _paper_attempts(paper).exists():
+
+                raise ValidationError(
+                    "Không thể xóa phiên bản đề đã có lượt thi. "
+                    "Dữ liệu lịch sử phải được bảo toàn."
+                )
+
+            assignment_count = ExamAssignment.objects.filter(
+                paper=paper,
+            ).count()
+
+            # Chỉ xóa các phân công chưa phát sinh lượt thi.
+            ExamAssignment.objects.filter(
+                paper=paper,
+            ).delete()
+
+            paper_code = paper.paper_code
+
+            paper.delete()
+
+        if assignment_count:
+            messages.success(
+                request,
+                (
+                    f"Đã xóa phiên bản {paper_code} "
+                    f"và hủy {assignment_count} phân công "
+                    "chưa bắt đầu."
+                ),
+            )
+        else:
+            messages.success(
+                request,
+                f"Đã xóa phiên bản đề {paper_code}.",
+            )
+
+    except ValidationError as exc:
+        messages.error(
+            request,
+            "; ".join(exc.messages),
+        )
+
+    return redirect(
+        "teacher_exam_papers",
+        exam_id=exam.pk,
+    )
+
+
+# ============================================================
+# TEACHER EXAM ASSIGNMENT MANAGEMENT
+# ============================================================
+
+@login_required
+@user_passes_test(is_teacher, login_url="home")
+def teacher_exam_assignments(request, exam_id):
+    """
+    Quản lý phân công phiên bản đề cho sinh viên.
+
+    Hỗ trợ:
+    - Phân công thủ công.
+    - Phân công ngẫu nhiên cân bằng.
+    - Theo dõi danh sách sinh viên đã được phân công.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    if request.method == "POST":
+
+        action = request.POST.get("action", "").strip()
+
+        assigned_by = getattr(
+            request.user,
+            "userprofile",
+            None,
+        )
+
+        try:
+
+            # ------------------------------------------------
+            # 1. PHÂN CÔNG THỦ CÔNG
+            # ------------------------------------------------
+
+            if action == "manual":
+
+                student_id = request.POST.get(
+                    "student_id",
+                    "",
+                ).strip()
+
+                paper_id = request.POST.get(
+                    "paper_id",
+                    "",
+                ).strip()
+
+                if not exam.offering_id:
+                    raise ValidationError(
+                        "Bài thi chưa được gắn với lớp học phần."
+                    )
+
+                enrollment = get_object_or_404(
+                    Enrollment.objects.select_related(
+                        "student",
+                    ),
+                    course_offering_id=exam.offering_id,
+                    student_id=student_id,
+                    status="active",
+                )
+
+                paper = get_object_or_404(
+                    ExamPaper,
+                    pk=paper_id,
+                    exam=exam,
+                    is_active=True,
+                )
+
+                assign_paper_manual(
+                    exam,
+                    paper,
+                    enrollment.student,
+                    assigned_by=assigned_by,
+                )
+
+                messages.success(
+                    request,
+                    (
+                        "Phân công mã đề "
+                        f"{paper.paper_code} thành công."
+                    ),
+                )
+
+            # ------------------------------------------------
+            # 2. PHÂN CÔNG NGẪU NHIÊN
+            # ------------------------------------------------
+
+            elif action == "random":
+
+                selected_paper_ids = list(
+                    dict.fromkeys(
+                        request.POST.getlist("paper_ids")
+                    )
+                )
+
+                if not selected_paper_ids:
+                    raise ValidationError(
+                        "Vui lòng chọn ít nhất một phiên bản đề."
+                    )
+
+                papers = list(
+                    ExamPaper.objects.filter(
+                        exam=exam,
+                        is_active=True,
+                        pk__in=selected_paper_ids,
+                    ).order_by("paper_number")
+                )
+
+                if len(papers) != len(selected_paper_ids):
+                    raise ValidationError(
+                        "Có phiên bản đề không hợp lệ hoặc đã ngừng sử dụng."
+                    )
+
+                assignments = assign_papers_random(
+                    exam,
+                    papers,
+                    assigned_by=assigned_by,
+                )
+
+                messages.success(
+                    request,
+                    (
+                        "Đã phân công ngẫu nhiên thành công "
+                        f"{len(assignments)} sinh viên."
+                    ),
+                )
+
+            else:
+                raise ValidationError(
+                    "Thao tác phân công không hợp lệ."
+                )
+
+            return redirect(
+                "teacher_exam_assignments",
+                exam_id=exam.pk,
+            )
+
+        except ValidationError as exc:
+
+            messages.error(
+                request,
+                "; ".join(exc.messages),
+            )
+
+    # --------------------------------------------------------
+    # 3. LẤY DANH SÁCH PHIÊN BẢN ĐỀ
+    # --------------------------------------------------------
+
+    papers = (
+        ExamPaper.objects
+        .filter(
+            exam=exam,
+            is_active=True,
+        )
+        .order_by("paper_number")
+    )
+
+    # --------------------------------------------------------
+    # 4. LẤY DANH SÁCH SINH VIÊN ĐANG GHI DANH
+    # --------------------------------------------------------
+
+    enrollments = Enrollment.objects.none()
+
+    if exam.offering_id:
+
+        enrollments = (
+            Enrollment.objects
+            .filter(
+                course_offering_id=exam.offering_id,
+                status="active",
+                student__role="student",
+            )
+            .select_related(
+                "student",
+                "student__user",
+            )
+            .order_by(
+                "student__user__last_name",
+                "student__user__first_name",
+                "student__user__username",
+            )
+        )
+
+    # --------------------------------------------------------
+    # 5. LẤY DANH SÁCH PHÂN CÔNG ĐÃ TỒN TẠI
+    # --------------------------------------------------------
+
+    assignments = (
+        ExamAssignment.objects
+        .filter(exam=exam)
+        .select_related(
+            "student",
+            "student__user",
+            "paper",
+            "assigned_by",
+            "assigned_by__user",
+        )
+        .order_by(
+            "paper__paper_number",
+            "student__user__last_name",
+        )
+    )
+
+    assignment_map = {
+        assignment.student_id: assignment
+        for assignment in assignments
+    }
+
+    student_rows = []
+
+    for enrollment in enrollments:
+
+        student = enrollment.student
+
+        student_rows.append({
+            "student": student,
+            "assignment": assignment_map.get(student.pk),
+        })
+
+    return render(
+        request,
+        "exam/teacher_exam_assignments.html",
+        {
+            "exam": exam,
+            "papers": papers,
+            "student_rows": student_rows,
+            "assignments": assignments,
+            "assignment_count": assignments.count(),
+            "student_count": enrollments.count(),
+            "unassigned_count": sum(
+                1
+                for row in student_rows
+                if row["assignment"] is None
+            ),
+        },
+    )
+
+
+def _assignment_has_attempt(exam, assignment):
+    """
+    Kiểm tra sinh viên đã có lượt thi thuộc bài thi này chưa.
+
+    Kiểm tra cả quan hệ assignment và quan hệ student trực tiếp
+    để bảo vệ cả các lượt thi tương thích dữ liệu cũ.
+    """
+
+    return StudentExam.objects.filter(
+        Q(assignment_id=assignment.pk)
+        | Q(
+            exam_id=exam.pk,
+            student_id=assignment.student.user_id,
+        )
+    ).exists()
+
+
+
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+def teacher_edit_exam_assignment(
+    request,
+    exam_id,
+    assignment_id,
+):
+    """
+    Chuyển sinh viên sang phiên bản đề khác.
+
+    Không thay đổi sinh viên và phương thức phân công.
+    Không cho phép sửa nếu sinh viên đã có lượt thi.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    assignment = get_object_or_404(
+        ExamAssignment.objects.select_related(
+            "student",
+            "student__user",
+            "paper",
+        ),
+        pk=assignment_id,
+        exam=exam,
+    )
+
+    if _assignment_has_attempt(exam, assignment):
+
+        messages.error(
+            request,
+            "Sinh viên đã có lượt thi. Không thể thay đổi phân công.",
+        )
+
+        return redirect(
+            "teacher_exam_assignments",
+            exam_id=exam.pk,
+        )
+
+    papers = ExamPaper.objects.filter(
+        exam=exam,
+        is_active=True,
+    ).order_by("paper_number")
+
+    selected_paper_id = assignment.paper_id
+
+    if request.method == "POST":
+
+        selected_paper_id = request.POST.get(
+            "paper_id",
+            "",
+        ).strip()
+
+        try:
+            with transaction.atomic():
+
+                locked_assignment = (
+                    ExamAssignment.objects
+                    .select_for_update()
+                    .select_related(
+                        "student",
+                        "student__user",
+                    )
+                    .get(
+                        pk=assignment_id,
+                        exam=exam,
+                    )
+                )
+
+                # Kiểm tra lại ngay trước khi cập nhật.
+                if _assignment_has_attempt(
+                    exam,
+                    locked_assignment,
+                ):
+                    raise ValidationError(
+                        "Sinh viên vừa phát sinh lượt thi. "
+                        "Không thể thay đổi phân công."
+                    )
+
+                selected_paper = get_object_or_404(
+                    ExamPaper,
+                    pk=selected_paper_id,
+                    exam=exam,
+                    is_active=True,
+                )
+
+                locked_assignment.paper = selected_paper
+
+                locked_assignment.full_clean()
+
+                locked_assignment.save(
+                    update_fields=["paper"]
+                )
+
+            messages.success(
+                request,
+                (
+                    "Đã cập nhật phiên bản đề cho sinh viên "
+                    f"{assignment.student.student_id}."
+                ),
+            )
+
+            return redirect(
+                "teacher_exam_assignments",
+                exam_id=exam.pk,
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                "; ".join(exc.messages),
+            )
+
+        except ValueError:
+            messages.error(
+                request,
+                "Phiên bản đề được chọn không hợp lệ.",
+            )
+
+    return render(
+        request,
+        "exam/teacher_exam_assignment_form.html",
+        {
+            "exam": exam,
+            "assignment": assignment,
+            "papers": papers,
+            "selected_paper_id": selected_paper_id,
+        },
+    )
+
+
+@login_required
+@user_passes_test(
+    is_teacher,
+    login_url="home",
+)
+@require_POST
+def teacher_delete_exam_assignment(
+    request,
+    exam_id,
+    assignment_id,
+):
+    """
+    Hủy phân công đề của một sinh viên.
+
+    Không cho xóa nếu sinh viên đã có lượt thi.
+    """
+
+    exam = _get_accessible_teacher_exam(
+        request,
+        exam_id,
+    )
+
+    try:
+        with transaction.atomic():
+
+            assignment = get_object_or_404(
+                ExamAssignment.objects
+                .select_for_update()
+                .select_related(
+                    "student",
+                    "student__user",
+                    "paper",
+                ),
+                pk=assignment_id,
+                exam=exam,
+            )
+
+            if _assignment_has_attempt(
+                exam,
+                assignment,
+            ):
+                raise ValidationError(
+                    "Sinh viên đã có lượt thi. "
+                    "Không thể xóa phân công để bảo toàn lịch sử."
+                )
+
+            student_code = (
+                assignment.student.student_id
+                or assignment.student.user.username
+            )
+
+            paper_code = assignment.paper.paper_code
+
+            assignment.delete()
+
+        messages.success(
+            request,
+            (
+                f"Đã hủy phân công mã đề {paper_code} "
+                f"của sinh viên {student_code}."
+            ),
+        )
+
+    except ValidationError as exc:
+        messages.error(
+            request,
+            "; ".join(exc.messages),
+        )
+
+    return redirect(
+        "teacher_exam_assignments",
+        exam_id=exam.pk,
+    )
+
 
 def _teacher_can_manage_student_exam(user, student_exam):
     """
@@ -4536,38 +6339,74 @@ def teacher_results_view(request):
 # ACCESSIBLE TEACHER EXAM
 # ============================================================
 
-def _get_accessible_teacher_exam(
-    request,
-    exam_id,
-):
+def _get_accessible_teacher_exam(request, exam_id):
+    """
+    Lấy bài thi mà tài khoản giảng viên/admin có quyền quản lý.
+
+    - Superuser: được phép.
+    - Admin: được phép.
+    - Lecturer: chỉ được quản lý lớp học phần được phân công.
+    - Staff không có hồ sơ: được phép theo quyền staff.
+    - Các vai trò khác: không được phép.
+    """
 
     exam = get_object_or_404(
         Exam.objects.select_related(
             "course",
             "offering",
         ),
-        id=exam_id,
+        pk=exam_id,
     )
 
-    profile = request.user.userprofile
+    # 1. Superuser được phép quản lý tất cả bài thi.
+    if request.user.is_superuser:
+        return exam
 
+    # 2. Lấy hồ sơ người dùng.
+    profile = getattr(
+        request.user,
+        "userprofile",
+        None,
+    )
+
+    # 3. Staff không có hồ sơ được phép quản lý.
+    if profile is None:
+        if request.user.is_staff:
+            return exam
+
+        raise Http404(
+            "Không tìm thấy hồ sơ người dùng."
+        )
+
+    # 4. Admin được phép quản lý tất cả bài thi.
+    if profile.role == "admin":
+        return exam
+
+    # 5. Giảng viên phải được phân công lớp học phần.
+    # Không bỏ qua bước này dù tài khoản có is_staff=True.
     if profile.role == "lecturer":
 
-        if (
-            not exam.offering_id
-            or not TeachingAssignment.objects.filter(
-                course_offering=exam.offering,
-                lecturer=profile,
-            ).exists()
-        ):
-
+        if not exam.offering_id:
             raise Http404(
-                "Bạn không được phân công "
-                "giảng dạy lớp học phần này."
+                "Bài thi chưa được gán lớp học phần."
             )
 
-    return exam
+        is_assigned = TeachingAssignment.objects.filter(
+            course_offering_id=exam.offering_id,
+            lecturer=profile,
+        ).exists()
 
+        if not is_assigned:
+            raise Http404(
+                "Bạn không được phân công giảng dạy lớp học phần này."
+            )
+
+        return exam
+
+    # 6. Các vai trò còn lại không được quản lý bài thi.
+    raise Http404(
+        "Bạn không có quyền quản lý bài thi này."
+    )
 
 # ============================================================
 # REOPEN EXAM COMPUTER
@@ -6069,4 +7908,378 @@ def teacher_monitor_data(request):
             "count": len(rows),
             "rows": rows,
         }
+    )
+
+
+# ============================================================
+# ĐIỂM DANH KHUÔN MẶT - TRANG CHỌN BÀI THI
+# ============================================================
+
+@login_required(login_url="qr_login_page")
+def face_attendance_view(request):
+    profile = get_object_or_404(
+        UserProfile,
+        user=request.user,
+    )
+
+    # Chỉ giảng viên và quản trị viên được truy cập.
+    if profile.role not in ("lecturer", "admin"):
+        messages.error(
+            request,
+            "Bạn không có quyền truy cập chức năng điểm danh.",
+        )
+        return redirect("course_list")
+
+    # Lấy các lớp học phần mà giảng viên được phân công.
+    if profile.role == "lecturer":
+        offerings = CourseOffering.objects.filter(
+            teaching_assignments__lecturer=profile,
+        ).distinct()
+    else:
+        # Quản trị viên có thể xem các lớp học phần.
+        offerings = CourseOffering.objects.all()
+
+    # Chỉ hiển thị bài thi tại lớp, đang được cho phép thi
+    # và có lớp học phần hợp lệ.
+    exams = (
+        Exam.objects
+        .filter(
+            offering__in=offerings,
+            exam_type=Exam.EXAM_TYPE_CLASSROOM,
+            is_active=True,
+        )
+        .select_related(
+            "course",
+            "offering",
+            "offering__term",
+        )
+        .order_by("start_time")
+    )
+
+    return render(
+        request,
+        "exam/face_attendance.html",
+        {
+            "title": "Điểm danh khuôn mặt",
+            "exams": exams,
+        },
+    )
+
+
+
+
+@csrf_protect
+@login_required(login_url="qr_login_page")
+@require_POST
+def verify_face_attendance(request, exam_id):
+    """
+    Xác minh khuôn mặt sinh viên và ghi nhận điểm danh
+    cho một bài thi tại lớp.
+    """
+    import base64
+    import binascii
+    import io
+    import json
+    import math
+
+    import numpy as np
+    from PIL import Image, UnidentifiedImageError
+    from django.db import transaction
+    from django.http import JsonResponse
+    from django.shortcuts import get_object_or_404
+    from django.views.decorators.http import require_POST
+    from deepface import DeepFace
+
+    profile = get_object_or_404(UserProfile, user=request.user)
+
+    if profile.role not in ("lecturer", "admin"):
+        return JsonResponse(
+            {"success": False, "message": "Bạn không có quyền điểm danh."},
+            status=403,
+        )
+
+    exam = get_object_or_404(
+        Exam.objects.select_related("offering", "course"),
+        pk=exam_id,
+    )
+
+    if (
+        exam.exam_type != Exam.EXAM_TYPE_CLASSROOM
+        or exam.offering_id is None
+    ):
+        return JsonResponse(
+            {"success": False, "message": "Bài thi không thuộc hình thức thi tại lớp."},
+            status=400,
+        )
+
+    if profile.role == "lecturer":
+        if not TeachingAssignment.objects.filter(
+            course_offering_id=exam.offering_id,
+            lecturer=profile,
+        ).exists():
+            return JsonResponse(
+                {"success": False, "message": "Bạn không được phân công dạy lớp này."},
+                status=403,
+            )
+
+    try:
+        data = json.loads(request.body or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse(
+            {"success": False, "message": "Dữ liệu gửi lên không hợp lệ."},
+            status=400,
+        )
+
+    if data.get("consent") is not True:
+        return JsonResponse(
+            {"success": False, "message": "Cần xác nhận đồng ý xử lý ảnh khuôn mặt."},
+            status=400,
+        )
+
+    image_data = data.get("image", "")
+
+    if not isinstance(image_data, str):
+        return JsonResponse(
+            {"success": False, "message": "Ảnh khuôn mặt không hợp lệ."},
+            status=400,
+        )
+
+    if image_data.startswith("data:image/jpeg;base64,"):
+        encoded = image_data.split(",", 1)[1]
+    elif image_data.startswith("data:image/png;base64,"):
+        encoded = image_data.split(",", 1)[1]
+    else:
+        return JsonResponse(
+            {"success": False, "message": "Ảnh phải ở định dạng JPEG hoặc PNG."},
+            status=400,
+        )
+
+    if len(encoded) > 4 * 1024 * 1024:
+        return JsonResponse(
+            {"success": False, "message": "Ảnh quá lớn."},
+            status=413,
+        )
+
+    try:
+        raw_image = base64.b64decode(encoded, validate=True)
+
+        if len(raw_image) > 3 * 1024 * 1024:
+            raise ValueError("Image too large")
+
+        with Image.open(io.BytesIO(raw_image)) as img:
+            if img.format not in ("JPEG", "PNG"):
+                raise ValueError("Unsupported image format")
+
+            img.verify()
+
+        with Image.open(io.BytesIO(raw_image)) as img:
+            img = img.convert("RGB")
+
+            if (
+                img.width < 160
+                or img.height < 160
+                or img.width > 3000
+                or img.height > 3000
+            ):
+                raise ValueError("Invalid dimensions")
+
+            image_array = np.asarray(img)
+
+    except (
+        ValueError,
+        binascii.Error,
+        UnidentifiedImageError,
+        OSError,
+    ):
+        return JsonResponse(
+            {"success": False, "message": "Không thể đọc ảnh. Vui lòng quét lại."},
+            status=400,
+        )
+
+    try:
+        representations = DeepFace.represent(
+            img_path=image_array,
+            model_name="Facenet512",
+            detector_backend="opencv",
+            enforce_detection=True,
+        )
+    except Exception:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không nhận diện được khuôn mặt. Hãy đặt khuôn mặt ngay trước camera và thử lại.",
+            },
+            status=422,
+        )
+
+    if len(representations) != 1:
+        return JsonResponse(
+            {"success": False, "message": "Ảnh phải có đúng một khuôn mặt."},
+            status=422,
+        )
+
+    query_embedding = representations[0].get("embedding")
+
+    if not is_valid_face_embedding(query_embedding):
+        return JsonResponse(
+            {"success": False, "message": "Không tạo được dữ liệu khuôn mặt hợp lệ."},
+            status=422,
+        )
+
+    query_vector = np.asarray(query_embedding, dtype=np.float64)
+    query_norm = np.linalg.norm(query_vector)
+
+    # Chỉ xét sinh viên đang hoạt động trong lớp học phần của bài thi.
+    enrollments = Enrollment.objects.filter(
+        course_offering_id=exam.offering_id,
+        status="active",
+        student__role="student",
+        student__user__is_active=True,
+        student__face_profile__is_active=True,
+        student__face_profile__model_name="Facenet512",
+    ).select_related(
+        "student",
+        "student__user",
+        "student__face_profile",
+    )
+
+    candidates = []
+
+    for enrollment in enrollments:
+        student = enrollment.student
+        face_profile = student.face_profile
+        stored_embedding = face_profile.embedding
+
+        if not is_valid_face_embedding(stored_embedding):
+            continue
+
+        stored_vector = np.asarray(stored_embedding, dtype=np.float64)
+        stored_norm = np.linalg.norm(stored_vector)
+
+        if not math.isfinite(stored_norm) or stored_norm <= 0:
+            continue
+
+        similarity = float(
+            np.dot(query_vector, stored_vector)
+            / (query_norm * stored_norm)
+        )
+
+        if not math.isfinite(similarity):
+            continue
+
+        similarity = max(-1.0, min(1.0, similarity))
+        distance = 1.0 - similarity
+        candidates.append((distance, student))
+
+    if not candidates:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Không tìm thấy sinh viên có hồ sơ khuôn mặt hợp lệ trong lớp này.",
+            },
+            status=404,
+        )
+
+    candidates.sort(key=lambda item: item[0])
+    best_distance, best_student = candidates[0]
+
+    # Ngưỡng ban đầu cần được kiểm thử với dữ liệu khuôn mặt thực tế.
+    if best_distance > 0.30:
+        return JsonResponse(
+            {"success": False, "message": "Không khớp với hồ sơ khuôn mặt của sinh viên trong lớp."},
+            status=404,
+        )
+
+    # Từ chối nếu hai hồ sơ đứng đầu quá gần nhau về điểm khớp.
+    if (
+        len(candidates) > 1
+        and candidates[1][0] - best_distance < 0.05
+    ):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Kết quả nhận diện chưa đủ chắc chắn. Vui lòng quét lại.",
+            },
+            status=409,
+        )
+
+    from django.db import IntegrityError
+
+    try:
+        with transaction.atomic():
+            attendance, created = ExamAttendance.objects.get_or_create(
+                exam=exam,
+                student=best_student,
+                defaults={"method": ExamAttendance.METHOD_FACE},
+            )
+    except IntegrityError:
+        attendance = ExamAttendance.objects.get(
+            exam=exam,
+            student=best_student,
+        )
+        created = False
+
+    user = best_student.user
+    display_name = user.get_full_name().strip() or user.username
+
+    return JsonResponse(
+        {
+            "success": True,
+            "created": created,
+            "message": (
+                "Điểm danh thành công."
+                if created
+                else "Sinh viên này đã được điểm danh trước đó."
+            ),
+            "student": display_name,
+            "attendance_time": attendance.checked_in_at.isoformat(),
+        }
+    )
+
+
+
+
+
+@login_required(login_url="qr_login_page")
+def face_attendance_exam_view(request, exam_id):
+    profile = get_object_or_404(UserProfile, user=request.user)
+
+    if profile.role not in ("lecturer", "admin"):
+        messages.error(
+            request,
+            "Bạn không có quyền truy cập chức năng điểm danh.",
+        )
+        return redirect("course_list")
+
+    exam = get_object_or_404(
+        Exam.objects.select_related("course", "offering"),
+        pk=exam_id,
+        exam_type=Exam.EXAM_TYPE_CLASSROOM,
+        is_active=True,
+    )
+
+    if exam.offering_id is None:
+        messages.error(request, "Bài thi chưa được gắn với lớp học phần.")
+        return redirect("face_attendance")
+
+    if profile.role == "lecturer":
+        is_assigned = TeachingAssignment.objects.filter(
+            course_offering_id=exam.offering_id,
+            lecturer=profile,
+        ).exists()
+
+        if not is_assigned:
+            messages.error(
+                request,
+                "Bạn không được phân công dạy lớp có bài thi này.",
+            )
+            return redirect("face_attendance")
+
+    return render(
+        request,
+        "exam/face_attendance_scan.html",
+        {
+            "title": "Điểm danh khuôn mặt",
+            "exam": exam,
+        },
     )
