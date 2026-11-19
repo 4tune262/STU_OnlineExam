@@ -5269,3 +5269,135 @@ class TeacherExamAssignmentViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+
+
+
+
+class OfferingStudentQRPDFTests(TestCase):
+    """Kiểm thử PDF danh sách sinh viên kèm QR theo lớp học phần."""
+
+    def setUp(self):
+        from tempfile import TemporaryDirectory
+
+        self.media_directory = TemporaryDirectory()
+        self.settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name
+        )
+        self.settings_override.enable()
+
+        self.course = Course.objects.create(
+            code="QR101",
+            name="Kiểm thử xuất danh sách QR",
+            faculty="CNTT",
+        )
+
+        self.term = AcademicTerm.objects.create(
+            academic_year="2026-2027",
+            semester_number=1,
+            start_date=date(2026, 9, 1),
+            end_date=date(2027, 1, 31),
+        )
+
+        self.offering = CourseOffering.objects.create(
+            course=self.course,
+            term=self.term,
+            group_code="QR101-N1",
+            session_number=1,
+            classroom="P.101",
+        )
+
+        self.lecturer = self.create_profile(
+            "qr-pdf-lecturer",
+            "lecturer",
+        )
+
+        TeachingAssignment.objects.create(
+            course_offering=self.offering,
+            lecturer=self.lecturer,
+        )
+
+        self.student = self.create_profile(
+            "qr-pdf-student",
+            "student",
+        )
+        self.student.student_id = "D230001"
+        self.student.class_name = "D23_TH01"
+        self.student.user.first_name = "Nguyen"
+        self.student.user.last_name = "Van A"
+        self.student.user.save()
+        self.student.save()
+
+        Enrollment.objects.create(
+            course_offering=self.offering,
+            student=self.student,
+            status="active",
+        )
+
+    def tearDown(self):
+        self.settings_override.disable()
+        self.media_directory.cleanup()
+
+    def create_profile(self, username, role):
+        user = User.objects.create_user(
+            username=username,
+            password="safe-test-password",
+        )
+
+        profile = user.userprofile
+        profile.role = role
+        profile.save()
+
+        return profile
+
+    def test_assigned_lecturer_can_download_student_qr_pdf(self):
+        self.client.force_login(self.lecturer.user)
+
+        response = self.client.get(
+            reverse(
+                "teacher_offering_qr_pdf",
+                args=(self.offering.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/pdf",
+        )
+        self.assertTrue(
+            response.content.startswith(b"%PDF")
+        )
+        self.assertIn(
+            "danh-sach-qr-qr101-n1.pdf",
+            response["Content-Disposition"].lower(),
+        )
+
+    def test_other_lecturer_cannot_download_class_qr_pdf(self):
+        other_lecturer = self.create_profile(
+            "qr-pdf-other-lecturer",
+            "lecturer",
+        )
+
+        self.client.force_login(other_lecturer.user)
+
+        response = self.client.get(
+            reverse(
+                "teacher_offering_qr_pdf",
+                args=(self.offering.pk,),
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_student_cannot_download_class_qr_pdf(self):
+        self.client.force_login(self.student.user)
+
+        response = self.client.get(
+            reverse(
+                "teacher_offering_qr_pdf",
+                args=(self.offering.pk,),
+            )
+        )
+
+        self.assertNotEqual(response.status_code, 200)

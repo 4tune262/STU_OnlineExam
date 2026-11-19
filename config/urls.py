@@ -82,7 +82,7 @@ urlpatterns = [
     path("api/verify-totp/",views.verify_totp_login,name="verify_totp_login",),
     # Khóa học
     path('courses/', views.course_list_view, name='course_list'),
-
+    path("teacher/offerings/<int:offering_id>/students-qr.pdf", views.teacher_offering_qr_pdf, name="teacher_offering_qr_pdf",),
     # Bài thi và Chấm điểm (Khớp đúng tên hàm trong views.py)
     path('exams/', views.exam_list_view, name='exam_list'),
     path('exam/<int:exam_id>/', views.take_exam_view, name='take_exam'),

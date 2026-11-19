@@ -266,3 +266,293 @@ body {
     padding: 19px 14px;
   }
 }
+/*Code CSS cho courses*/
+
+/* =========================================================
+   STU ONLINE EXAM - COURSE PAGE
+   Chỉ áp dụng cho trang courses.html
+========================================================= */
+
+.course-page {
+    --course-primary: #0756b5;
+    --course-primary-light: #eaf3ff;
+    --course-success: #168653;
+    --course-border: #e5eaf0;
+    --course-text: #243247;
+    --course-muted: #778397;
+
+    padding-top: 32px !important;
+    padding-bottom: 48px !important;
+    color: var(--course-text);
+}
+
+/* =========================
+   PAGE HEADER
+========================= */
+
+.course-page h2 {
+    font-size: 1.75rem;
+    font-weight: 750;
+    letter-spacing: -0.5px;
+    color: #172b4d;
+}
+
+.course-page .text-muted {
+    color: var(--course-muted) !important;
+}
+
+.course-page .badge.rounded-pill {
+    font-weight: 650;
+    letter-spacing: 0.1px;
+}
+
+/* =========================
+   COURSE CARD
+========================= */
+
+.course-page > .row > [class*="col-"] > .card {
+    border: 1px solid var(--course-border) !important;
+    border-radius: 16px !important;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(25, 55, 90, 0.055) !important;
+    transition:
+        transform 0.22s ease,
+        box-shadow 0.22s ease,
+        border-color 0.22s ease;
+}
+
+.course-page > .row > [class*="col-"] > .card:hover {
+    transform: translateY(-4px);
+    border-color: #cbdcf2 !important;
+    box-shadow: 0 12px 28px rgba(25, 55, 90, 0.11) !important;
+}
+
+.course-page > .row > [class*="col-"] > .card > .card-body {
+    padding: 24px !important;
+}
+
+.course-page .card-title,
+.course-page h5 {
+    color: #172b4d;
+    line-height: 1.45;
+    letter-spacing: -0.2px;
+}
+
+.course-page h5 {
+    font-size: 1.12rem;
+    font-weight: 750;
+}
+
+.course-page .card-body > p {
+    font-size: 0.9rem;
+    line-height: 1.65;
+}
+
+/* =========================
+   BADGES
+========================= */
+
+.course-page .badge.bg-primary-subtle {
+    background: #e8f1ff !important;
+    color: #0756b5 !important;
+}
+
+.course-page .badge.bg-light {
+    background: #f1f4f8 !important;
+    color: #68768a !important;
+    font-weight: 650;
+}
+
+.course-page .badge.bg-white {
+    background: #fff !important;
+}
+
+/* =========================
+   SECTION HEADINGS
+========================= */
+
+.course-page h6 {
+    font-size: 0.96rem;
+    font-weight: 750;
+    color: #26364b;
+}
+
+.course-page h6 i {
+    font-size: 1rem;
+}
+
+.course-page hr {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    opacity: 0.65;
+}
+
+/* =========================
+   OFFERING CARD
+========================= */
+
+.course-page .bg-light.bg-opacity-50 {
+    background: #f8faff !important;
+}
+
+.course-page .border.rounded-3 {
+    border-color: var(--course-border) !important;
+    border-radius: 11px !important;
+}
+
+.course-page .bg-light.bg-opacity-50 {
+    padding: 14px !important;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.course-page .bg-light.bg-opacity-50:hover {
+    background: #f0f6ff !important;
+    border-color: #c9ddf7 !important;
+}
+
+/* =========================
+   EMPTY STATE
+========================= */
+
+.course-page .text-center.py-3 {
+    background: #f8fafc !important;
+    border: 1px dashed #d7e0eb !important;
+    border-radius: 10px !important;
+    padding: 18px 12px !important;
+}
+
+.course-page .text-center.py-3 i {
+    font-size: 1.1rem;
+    color: #8996a8 !important;
+}
+
+.course-page .text-center.py-3 p {
+    margin-top: 6px !important;
+    font-size: 0.85rem;
+}
+
+/* =========================
+   EXAM ITEM
+========================= */
+
+.course-page .d-flex.flex-column.gap-2 > .border {
+    padding: 15px !important;
+    background: #fff;
+    transition:
+        border-color 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.course-page .d-flex.flex-column.gap-2 > .border:hover {
+    border-color: #c6d9f3 !important;
+    background: #fcfdff;
+    box-shadow: 0 3px 10px rgba(25, 55, 90, 0.045);
+}
+
+.course-page .d-flex.flex-column.gap-2 > .border > .fw-semibold {
+    font-size: 0.94rem;
+    line-height: 1.5;
+    color: #26364b;
+}
+
+/* =========================
+   ACTION BUTTONS
+========================= */
+
+.course-page .btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 7px 12px;
+    border-radius: 7px;
+    font-size: 0.82rem;
+    font-weight: 650;
+    transition: all 0.2s ease;
+}
+
+.course-page .btn-primary {
+    background: #0965cf;
+    border-color: #0965cf;
+}
+
+.course-page .btn-primary:hover {
+    background: #064fa8;
+    border-color: #064fa8;
+    transform: translateY(-1px);
+}
+
+.course-page .btn-success {
+    background: #168653;
+    border-color: #168653;
+}
+
+.course-page .btn-success:hover {
+    background: #106c42;
+    border-color: #106c42;
+    transform: translateY(-1px);
+}
+
+.course-page .btn-outline-success {
+    color: #168653;
+    border-color: #168653;
+    background: #fff;
+}
+
+.course-page .btn-outline-success:hover {
+    color: #fff;
+    background: #168653;
+    border-color: #168653;
+}
+
+/* =========================
+   CARD FOOTER
+========================= */
+
+.course-page .card-footer {
+    padding-top: 12px !important;
+    padding-bottom: 18px !important;
+    border-top: 1px solid #f0f2f5 !important;
+}
+
+.course-page .card-footer .small {
+    font-size: 0.77rem;
+    line-height: 1.55;
+    color: #8792a2 !important;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 767.98px) {
+
+    .course-page {
+        padding-top: 20px !important;
+    }
+
+    .course-page h2 {
+        font-size: 1.45rem;
+    }
+
+    .course-page > .row > [class*="col-"] > .card > .card-body {
+        padding: 18px !important;
+    }
+
+    .course-page .d-flex.flex-wrap.gap-2 {
+        gap: 8px !important;
+    }
+
+    .course-page .btn {
+        min-height: 38px;
+    }
+}
+
+@media (max-width: 380px) {
+
+    .course-page .d-flex.flex-wrap.gap-2 > .btn {
+        width: 100%;
+    }
+}

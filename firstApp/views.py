@@ -1613,6 +1613,143 @@ def is_valid_face_embedding(embedding):
     except (TypeError, ValueError, OverflowError):
         return False
 
+#
+# # ============================================================
+# # COURSE LIST
+# # ============================================================
+#
+# @login_required(login_url="qr_login_page")
+# def course_list_view(request):
+#
+#     profile = get_object_or_404(
+#         UserProfile,
+#         user=request.user,
+#     )
+#
+#     # ========================================================
+#     # STUDENT
+#     # ========================================================
+#
+#     if profile.role == "student":
+#
+#         offerings = (
+#             CourseOffering.objects
+#             .filter(
+#                 enrollments__student=profile,
+#                 enrollments__status="active",
+#             )
+#             .select_related(
+#                 "course",
+#                 "term",
+#             )
+#             .distinct()
+#         )
+#
+#         courses = (
+#             Course.objects
+#             .filter(
+#                 offerings__in=offerings
+#             )
+#             .distinct()
+#         )
+#
+#     # ========================================================
+#     # LECTURER
+#     # ========================================================
+#
+#     elif profile.role == "lecturer":
+#
+#         offerings = (
+#             CourseOffering.objects
+#             .filter(
+#                 teaching_assignments__lecturer=profile,
+#             )
+#             .select_related(
+#                 "course",
+#                 "term",
+#             )
+#             .distinct()
+#         )
+#
+#         courses = (
+#             Course.objects
+#             .filter(
+#                 offerings__in=offerings
+#             )
+#             .distinct()
+#         )
+#
+#     # ========================================================
+#     # ADMIN
+#     # ========================================================
+#
+#     elif profile.role == "admin" or request.user.is_staff:
+#
+#         offerings = (
+#             CourseOffering.objects
+#             .select_related(
+#                 "course",
+#                 "term",
+#             )
+#             .all()
+#         )
+#
+#         courses = (
+#             Course.objects
+#             .filter(
+#                 is_active=True,
+#                 offerings__in=offerings,
+#             )
+#             .distinct()
+#         )
+#
+#     else:
+#
+#         offerings = CourseOffering.objects.none()
+#         courses = Course.objects.none()
+#
+#     # ========================================================
+#     # EXAMS CỦA TỪNG COURSE
+#     # ========================================================
+#
+#     for course in courses:
+#
+#         if profile.role == "admin" or request.user.is_staff:
+#
+#             course.visible_exams = (
+#                 Exam.objects
+#                 .filter(
+#                     course=course,
+#                     is_active=True,
+#                 )
+#                 .select_related("offering")
+#                 .order_by("start_time")
+#             )
+#
+#         else:
+#
+#             course.visible_exams = (
+#                 Exam.objects
+#                 .filter(
+#                     course=course,
+#                     is_active=True,
+#                     offering__in=offerings,
+#                 )
+#                 .select_related("offering")
+#                 .order_by("start_time")
+#             )
+#
+#     return render(
+#         request,
+#         "courses.html",
+#         {
+#             "title": "Khóa học của bạn",
+#             "courses": courses,
+#             "offerings": offerings,
+#         },
+#     )
+
+
 
 # ============================================================
 # COURSE LIST
@@ -1626,72 +1763,24 @@ def course_list_view(request):
         user=request.user,
     )
 
+    is_admin = (
+        profile.role == "admin"
+        or request.user.is_staff
+        or request.user.is_superuser
+    )
+
     # ========================================================
-    # STUDENT
+    # PHÂN QUYỀN VÀ LẤY LỚP HỌC PHẦN
     # ========================================================
 
-    if profile.role == "student":
+    if is_admin:
 
         offerings = (
             CourseOffering.objects
-            .filter(
-                enrollments__student=profile,
-                enrollments__status="active",
+            .select_related("course", "term")
+            .prefetch_related(
+                "teaching_assignments__lecturer__user"
             )
-            .select_related(
-                "course",
-                "term",
-            )
-            .distinct()
-        )
-
-        courses = (
-            Course.objects
-            .filter(
-                offerings__in=offerings
-            )
-            .distinct()
-        )
-
-    # ========================================================
-    # LECTURER
-    # ========================================================
-
-    elif profile.role == "lecturer":
-
-        offerings = (
-            CourseOffering.objects
-            .filter(
-                teaching_assignments__lecturer=profile,
-            )
-            .select_related(
-                "course",
-                "term",
-            )
-            .distinct()
-        )
-
-        courses = (
-            Course.objects
-            .filter(
-                offerings__in=offerings
-            )
-            .distinct()
-        )
-
-    # ========================================================
-    # ADMIN
-    # ========================================================
-
-    elif profile.role == "admin" or request.user.is_staff:
-
-        offerings = (
-            CourseOffering.objects
-            .select_related(
-                "course",
-                "term",
-            )
-            .all()
         )
 
         courses = (
@@ -1703,52 +1792,416 @@ def course_list_view(request):
             .distinct()
         )
 
+    elif profile.role == "student":
+
+        offerings = (
+            CourseOffering.objects
+            .filter(
+                enrollments__student=profile,
+                enrollments__status="active",
+            )
+            .select_related("course", "term")
+            .prefetch_related(
+                "teaching_assignments__lecturer__user"
+            )
+            .distinct()
+        )
+
+        courses = (
+            Course.objects
+            .filter(offerings__in=offerings)
+            .distinct()
+        )
+
+    elif profile.role == "lecturer":
+
+        offerings = (
+            CourseOffering.objects
+            .filter(
+                teaching_assignments__lecturer=profile,
+            )
+            .select_related("course", "term")
+            .prefetch_related(
+                "teaching_assignments__lecturer__user"
+            )
+            .distinct()
+        )
+
+        courses = (
+            Course.objects
+            .filter(offerings__in=offerings)
+            .distinct()
+        )
+
     else:
 
         offerings = CourseOffering.objects.none()
         courses = Course.objects.none()
 
     # ========================================================
+    # GÁN LỚP HỌC PHẦN VÀO TỪNG COURSE
+    # ========================================================
+
+    # Đưa danh sách lớp học phần vào bộ nhớ một lần.
+    offering_list = list(offerings)
+
+    # Gom các lớp học phần theo mã khóa học.
+    offerings_by_course = {}
+
+    for offering in offering_list:
+        offerings_by_course.setdefault(
+            offering.course_id, []
+        ).append(offering)
+
+    # ========================================================
     # EXAMS CỦA TỪNG COURSE
     # ========================================================
 
-    for course in courses:
+    course_list = list(courses)
 
-        if profile.role == "admin" or request.user.is_staff:
+    for course in course_list:
 
-            course.visible_exams = (
-                Exam.objects
-                .filter(
-                    course=course,
-                    is_active=True,
-                )
-                .select_related("offering")
-                .order_by("start_time")
+        # Danh sách lớp học phần của môn học này.
+        course.visible_offerings = offerings_by_course.get(
+            course.pk, []
+        )
+
+        # Danh sách bài thi.
+        exams = (
+            Exam.objects
+            .filter(
+                course=course,
+                is_active=True,
+            )
+            .select_related("offering")
+            .order_by("start_time")
+        )
+
+        if not is_admin:
+            exams = exams.filter(
+                offering__in=course.visible_offerings
             )
 
-        else:
-
-            course.visible_exams = (
-                Exam.objects
-                .filter(
-                    course=course,
-                    is_active=True,
-                    offering__in=offerings,
-                )
-                .select_related("offering")
-                .order_by("start_time")
-            )
+        course.visible_exams = exams
 
     return render(
         request,
         "courses.html",
         {
             "title": "Khóa học của bạn",
-            "courses": courses,
-            "offerings": offerings,
+            "courses": course_list,
+            "offerings": offering_list,
         },
     )
 
+
+# ============================================================
+# TEACHER CHECK
+# ============================================================
+
+def is_teacher(user):
+
+    return user.is_authenticated and (
+        user.is_staff
+        or (
+            hasattr(
+                user,
+                "userprofile",
+            )
+            and user.userprofile.role in (
+                "admin",
+                "lecturer",
+            )
+        )
+    )
+@login_required(login_url="qr_login_page")
+@user_passes_test(is_teacher, login_url="home")
+def teacher_offering_qr_pdf(request, offering_id):
+    """
+    Xuất danh sách sinh viên kèm QR đăng nhập lần đầu
+    của một lớp học phần.
+
+    Giảng viên chỉ được xuất lớp được phân công.
+    Admin/superuser được phép xuất mọi lớp.
+    """
+
+    from html import escape
+    from pathlib import Path
+
+    from django.http import Http404, HttpResponse
+    from django.utils.text import slugify
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import (
+        Image as ReportLabImage,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    from .models import (
+        CourseOffering,
+        Enrollment,
+        TeachingAssignment,
+    )
+
+    profile = getattr(request.user, "userprofile", None)
+
+    offering = get_object_or_404(
+        CourseOffering.objects.select_related(
+            "course",
+            "term",
+        ),
+        pk=offering_id,
+    )
+
+    # Kiểm tra quyền truy cập lớp học phần.
+    is_admin = (
+            request.user.is_superuser
+            or (profile and profile.role == "admin")
+    )
+
+    if not is_admin:
+        if not profile or profile.role != "lecturer":
+            raise Http404("Bạn không có quyền xuất danh sách này.")
+
+        assigned = TeachingAssignment.objects.filter(
+            course_offering=offering,
+            lecturer=profile,
+        ).exists()
+
+        if not assigned:
+            raise Http404("Bạn không được phân công lớp học phần này.")
+
+    # Chỉ lấy sinh viên đang học và tài khoản đang hoạt động.
+    enrollments = (
+        Enrollment.objects
+        .filter(
+            course_offering=offering,
+            status="active",
+            student__role="student",
+            student__user__is_active=True,
+        )
+        .select_related(
+            "student",
+            "student__user",
+        )
+        .order_by(
+            "student__student_id",
+            "student__user__last_name",
+            "student__user__first_name",
+        )
+    )
+
+    students = [item.student for item in enrollments]
+
+    # Tìm font Unicode để hiển thị tiếng Việt.
+    font_candidates = (
+        Path(settings.BASE_DIR)
+        / "static" / "fonts" / "DejaVuSans.ttf",
+        Path("C:/Windows/Fonts/arial.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    )
+
+    font_path = next(
+        (path for path in font_candidates if path.exists()),
+        None,
+    )
+
+    font_name = "Helvetica"
+
+    if font_path:
+        font_name = "StudentQRUnicode"
+        if font_name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(
+                TTFont(font_name, str(font_path))
+            )
+
+    buffer = BytesIO()
+
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=28,
+        leftMargin=28,
+        topMargin=28,
+        bottomMargin=28,
+        title=f"Danh sach QR {offering.group_code}",
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "StudentQRTitle",
+        parent=styles["Title"],
+        fontName=font_name,
+        fontSize=15,
+        leading=20,
+        alignment=TA_CENTER,
+        spaceAfter=8,
+    )
+
+    info_style = ParagraphStyle(
+        "StudentQRInfo",
+        parent=styles["Normal"],
+        fontName=font_name,
+        fontSize=9,
+        leading=13,
+    )
+
+    cell_style = ParagraphStyle(
+        "StudentQRCell",
+        parent=styles["Normal"],
+        fontName=font_name,
+        fontSize=8,
+        leading=11,
+    )
+
+    header_style = ParagraphStyle(
+        "StudentQRHeader",
+        parent=cell_style,
+        textColor=colors.white,
+        alignment=TA_CENTER,
+        fontSize=8,
+    )
+
+    story = [
+        Paragraph(
+            "DANH SÁCH TÀI KHOẢN SINH VIÊN",
+            title_style,
+        ),
+        Paragraph(
+            f"Môn học: {escape(offering.course.name)} "
+            f"({escape(offering.course.code)})",
+            info_style,
+        ),
+        Paragraph(
+            f"Lớp học phần: {escape(offering.group_code)} "
+            f" - Ca {offering.session_number}",
+            info_style,
+        ),
+        Paragraph(
+            f"Học kỳ: {escape(str(offering.term))}",
+            info_style,
+        ),
+        Paragraph(
+            f"Tổng số sinh viên: {len(students)}",
+            info_style,
+        ),
+        Spacer(1, 12),
+    ]
+
+    table_rows = [[
+        Paragraph("STT", header_style),
+        Paragraph("MSSV", header_style),
+        Paragraph("Họ và tên", header_style),
+        Paragraph("Lớp", header_style),
+        Paragraph("Mã QR đăng nhập", header_style),
+    ]]
+
+    # Giữ các buffer ảnh sống đến khi ReportLab dựng xong PDF.
+    qr_streams = []
+
+    for index, student in enumerate(students, start=1):
+        full_name = (
+            student.user.get_full_name()
+            or student.user.username
+        )
+
+        # Ưu tiên ảnh QR đã lưu trong UserProfile.
+        if student.qr_code and student.qr_code.name:
+            try:
+                student.qr_code.open("rb")
+                qr_bytes = student.qr_code.read()
+                student.qr_code.close()
+                qr_stream = BytesIO(qr_bytes)
+            except (OSError, ValueError):
+                qr_stream = None
+        else:
+            qr_stream = None
+
+        # Nếu ảnh QR chưa tồn tại, tạo ảnh từ đúng qr_token hiện có.
+        if qr_stream is None:
+            import qrcode
+
+            qr_image = qrcode.make(str(student.qr_token))
+            qr_stream = BytesIO()
+            qr_image.save(qr_stream, format="PNG")
+            qr_stream.seek(0)
+
+        qr_streams.append(qr_stream)
+
+        qr_flowable = ReportLabImage(
+            qr_stream,
+            width=76,
+            height=76,
+        )
+
+        table_rows.append([
+            str(index),
+            Paragraph(
+                escape(student.student_id or "-"),
+                cell_style,
+            ),
+            Paragraph(
+                escape(full_name),
+                cell_style,
+            ),
+            Paragraph(
+                escape(student.class_name or "-"),
+                cell_style,
+            ),
+            qr_flowable,
+        ])
+
+    table = Table(
+        table_rows,
+        colWidths=[32, 78, 155, 85, 105],
+        rowHeights=[28] + [84] * len(students),
+        repeatRows=1,
+        hAlign="CENTER",
+    )
+
+    table.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#15517A")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#B8C5CE")),
+            ("ALIGN", (0, 0), (1, -1), "CENTER"),
+            ("ALIGN", (4, 1), (4, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ])
+    )
+
+    story.append(table)
+    document.build(story)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/pdf",
+    )
+
+    filename = (
+        slugify(offering.group_code)
+        or f"offering-{offering.pk}"
+    )
+
+    response["Content-Disposition"] = (
+        f'attachment; filename="danh-sach-QR-{filename}.pdf"'
+    )
+
+    return response
 
 
 
@@ -4140,25 +4593,7 @@ def submit_exam(
     )
 
 
-# ============================================================
-# TEACHER CHECK
-# ============================================================
 
-def is_teacher(user):
-
-    return user.is_authenticated and (
-        user.is_staff
-        or (
-            hasattr(
-                user,
-                "userprofile",
-            )
-            and user.userprofile.role in (
-                "admin",
-                "lecturer",
-            )
-        )
-    )
 
 def _paper_attempts(paper):
     """

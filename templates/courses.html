@@ -1,188 +1,312 @@
+```django
 {% extends "base.html" %}
 
 {% block body_block %}
 
-<div class="container mt-4">
+<div class="container py-4 course-page">
 
-  <h2 class="mb-4">
-    <i class="bi bi-journal-bookmark-fill"></i>
-    Danh sách Khóa học & Bài thi
-  </h2>
+    <!-- =========================
+         PAGE HEADER
+    ========================== -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
 
-  <div class="row">
-
-    {% for course in courses %}
-
-    <div class="col-md-4 mb-4">
-
-      <div class="card shadow-sm h-100">
-
-        <div class="card-body">
-
-          <!-- KHOA -->
-          <span class="badge bg-secondary mb-2">
-            {{ course.get_faculty_display }}
-          </span>
-
-          <!-- TEN MON -->
-          <h4 class="card-title text-primary">
-            {{ course.name }}
-          </h4>
-
-          <!-- MA MON -->
-          <p class="text-muted small">
-            Mã môn: {{ course.code }}
-          </p>
-
-          <!-- MO TA -->
-          <p class="card-text">
-            {{ course.description|default:"Chưa có mô tả môn học." }}
-          </p>
-
-
-          <!-- =====================================================
-               DANH SACH LOP / CA HOC
-               ===================================================== -->
-
-          {% for offering in course.visible_offerings %}
-
-          <div class="border rounded p-2 mb-2">
-
-            <div class="fw-bold">
-              {{ offering.term }} · {{ offering.group_code }}
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge rounded-pill bg-primary-subtle text-primary px-3 py-2">
+                    <i class="bi bi-mortarboard-fill me-1"></i>
+                    ĐÀO TẠO
+                </span>
             </div>
 
-            <div class="small text-muted">
+            <h2 class="fw-bold text-dark mb-1">
+                Khóa học & Bài thi
+            </h2>
 
-              Ca {{ offering.session_number }}
+            <p class="text-muted mb-0">
+                Theo dõi thông tin môn học, lớp học phần và các bài thi.
+            </p>
+        </div>
 
-              {% if offering.classroom %}
-                · Phòng {{ offering.classroom }}
-              {% endif %}
+        <div class="text-muted small">
+            <i class="bi bi-journal-text me-1"></i>
+            Danh sách học phần
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         COURSE LIST
+    ========================== -->
+    <div class="row g-4">
+
+        {% for course in courses %}
+
+        <div class="col-12 col-lg-6 col-xl-4">
+
+            <div class="card border-0 shadow-sm h-100 rounded-4 overflow-hidden">
+
+                <!-- CARD HEADER -->
+                <div class="card-body p-4">
+
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+
+                        <span class="badge rounded-pill bg-primary-subtle text-primary px-3 py-2">
+                            {{ course.get_faculty_display }}
+                        </span>
+
+                        <span class="text-muted small">
+                            <i class="bi bi-bookmark me-1"></i>
+                            {{ course.code }}
+                        </span>
+
+                    </div>
+
+
+                    <!-- COURSE NAME -->
+                    <h5 class="fw-bold text-dark mb-2">
+                        {{ course.name }}
+                    </h5>
+
+                    <p class="text-muted small mb-3">
+                        {{ course.description|default:"Chưa có mô tả môn học." }}
+                    </p>
+
+
+                    <hr class="border-light-subtle">
+
+
+                    <!-- =========================
+                         COURSE OFFERINGS
+                    ========================== -->
+                    <div class="mb-4">
+
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+
+                            <h6 class="fw-bold text-dark mb-0">
+                                <i class="bi bi-people-fill text-primary me-2"></i>
+                                Lớp học phần
+                            </h6>
+
+                            <span class="badge bg-light text-secondary">
+                                {{ course.visible_offerings|length }} lớp
+                            </span>
+
+                        </div>
+
+
+                        {% for offering in course.visible_offerings %}
+
+                        <div class="border rounded-3 p-3 mb-2 bg-light bg-opacity-50">
+
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+
+                                <div class="fw-semibold text-dark">
+                                    {{ offering.group_code }}
+                                </div>
+
+                                <span class="badge bg-white text-primary border">
+                                    Ca {{ offering.session_number }}
+                                </span>
+
+                            </div>
+
+                            <div class="small text-muted mt-2">
+
+                                <div class="mb-1">
+                                    <i class="bi bi-calendar3 me-1"></i>
+                                    {{ offering.term }}
+                                </div>
+
+                                {% if offering.classroom %}
+                                <div class="mb-1">
+                                    <i class="bi bi-geo-alt me-1"></i>
+                                    Phòng {{ offering.classroom }}
+                                </div>
+                                {% endif %}
+
+                            </div>
+
+
+                            <!-- LECTURERS -->
+                            {% for assignment in offering.teaching_assignments.all %}
+
+                            <div class="small text-secondary mt-2">
+                                <i class="bi bi-person-badge me-1"></i>
+                                {{ assignment.lecturer.user.get_full_name|default:assignment.lecturer.user.username }}
+                            </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                        {% empty %}
+
+                        <div class="text-center py-3 border rounded-3 bg-light">
+                            <i class="bi bi-info-circle text-muted"></i>
+                            <p class="small text-muted mb-0 mt-1">
+                                Chưa có lớp học phần.
+                            </p>
+                        </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <hr class="border-light-subtle">
+
+
+                    <!-- =========================
+                         EXAM LIST
+                    ========================== -->
+                    <div>
+
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+
+                            <h6 class="fw-bold text-dark mb-0">
+                                <i class="bi bi-file-earmark-text-fill text-success me-2"></i>
+                                Bài thi
+                            </h6>
+
+                            <span class="badge bg-light text-secondary">
+                                {{ course.visible_exams|length }} bài thi
+                            </span>
+
+                        </div>
+
+
+                        <div class="d-flex flex-column gap-2">
+
+                            {% for exam in course.visible_exams %}
+
+                            <div class="border rounded-3 p-3">
+
+                                <div class="fw-semibold text-dark mb-1">
+                                    {{ exam.title }}
+                                </div>
+
+                                {% if exam.offering %}
+
+                                <div class="small text-muted mb-3">
+                                    <i class="bi bi-people me-1"></i>
+                                    {{ exam.offering.group_code }}
+                                    <span class="mx-1">·</span>
+                                    Ca {{ exam.offering.session_number }}
+                                </div>
+
+                                {% endif %}
+
+
+                                <!-- =========================
+                                     ROLE-BASED ACTIONS
+                                ========================== -->
+
+                                {% if user.userprofile.role == "lecturer" %}
+
+                                <!-- LECTURER ACTIONS -->
+                                <div class="d-flex flex-wrap gap-2">
+
+                                    <a
+                                        href="{% url 'teacher_monitor' %}"
+                                        class="btn btn-sm btn-primary"
+                                    >
+                                        <i class="bi bi-camera-video me-1"></i>
+                                        Vào giám sát
+                                    </a>
+
+                                    {% if exam.offering_id %}
+
+                                    <a
+                                        href="{% url 'teacher_offering_qr_pdf' exam.offering_id %}"
+                                        class="btn btn-sm btn-outline-success"
+                                        target="_blank"
+                                        rel="noopener"
+                                        title="Xuất danh sách sinh viên kèm mã QR đăng nhập"
+                                    >
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>
+                                        In danh sách QR
+                                    </a>
+
+                                    {% endif %}
+
+                                </div>
+
+                                {% else %}
+
+                                <!-- STUDENT ACTION -->
+                                <a
+                                    href="{% url 'take_exam' exam.id %}"
+                                    class="btn btn-sm btn-success"
+                                >
+                                    <i class="bi bi-pencil-square me-1"></i>
+                                    Vào thi
+                                </a>
+
+                                {% endif %}
+
+                            </div>
+
+                            {% empty %}
+
+                            <div class="text-center py-3 border rounded-3 bg-light">
+                                <i class="bi bi-file-earmark-x text-muted fs-5"></i>
+                                <p class="small text-muted mb-0 mt-1">
+                                    Chưa có bài thi nào.
+                                </p>
+                            </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- CARD FOOTER -->
+                <div class="card-footer bg-white border-0 px-4 pb-3 pt-0">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Thông tin học phần và bài thi được cập nhật từ hệ thống.
+                    </div>
+                </div>
 
             </div>
-
-
-            <!-- GIANG VIEN -->
-            {% for assignment in offering.teaching_assignments.all %}
-
-            <div class="small">
-
-              {{ assignment.lecturer.user.get_full_name|default:assignment.lecturer.user.username }}
-
-            </div>
-
-            {% endfor %}
-
-          </div>
-
-          {% endfor %}
-
-
-          <hr>
-
-
-          <!-- =====================================================
-               DANH SACH BAI THI
-               ===================================================== -->
-
-          <h6 class="fw-bold">
-            Các bài thi hiện có:
-          </h6>
-
-
-          <ul class="list-unstyled">
-
-            {% for exam in course.visible_exams %}
-
-            <li class="mb-2 d-flex justify-content-between align-items-center">
-
-              <span>
-
-                {{ exam.title }}
-
-                {% if exam.offering %}
-
-                <small class="d-block text-muted">
-
-                  {{ exam.offering.group_code }}
-                  · Ca {{ exam.offering.session_number }}
-
-                </small>
-
-                {% endif %}
-
-              </span>
-
-
-              <!-- =================================================
-                   NUT THEO VAI TRO
-                   SINH VIEN  -> VAO THI
-                   GIANG VIEN -> VAO GIAM SAT
-                   ================================================= -->
-
-              {% if user.userprofile.role == "lecturer" %}
-
-              <!-- GIANG VIEN -->
-              <a
-                href="{% url 'teacher_monitor' %}"
-                class="btn btn-sm btn-primary"
-              >
-
-                <i class="bi bi-camera-video"></i>
-                Vào giám sát
-
-              </a>
-
-              {% else %}
-
-              <!-- SINH VIEN -->
-              <a
-                href="{% url 'take_exam' exam.id %}"
-                class="btn btn-sm btn-success"
-              >
-
-                <i class="bi bi-pencil-square"></i>
-                Vào thi
-
-              </a>
-
-              {% endif %}
-
-            </li>
-
-
-            {% empty %}
-
-            <li class="text-muted small">
-              Chưa có bài thi nào.
-            </li>
-
-            {% endfor %}
-
-          </ul>
 
         </div>
 
-      </div>
+        {% empty %}
+
+        <!-- NO COURSES -->
+        <div class="col-12">
+
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body text-center py-5">
+
+                    <div class="mb-3">
+                        <i class="bi bi-journal-x text-secondary" style="font-size: 3rem;"></i>
+                    </div>
+
+                    <h5 class="fw-bold text-dark">
+                        Chưa có khóa học
+                    </h5>
+
+                    <p class="text-muted mb-0">
+                        Hiện tại chưa có khóa học nào được hiển thị.
+                        Vui lòng quay lại sau.
+                    </p>
+
+                </div>
+            </div>
+
+        </div>
+
+        {% endfor %}
 
     </div>
-
-
-    {% empty %}
-
-    <div class="col-12">
-
-      <p class="text-muted">
-        Chưa có khóa học nào được tạo.
-      </p>
-
-    </div>
-
-    {% endfor %}
-
-  </div>
 
 </div>
 
 {% endblock %}
+```
